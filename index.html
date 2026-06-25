@@ -1262,6 +1262,25 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
             <div><span style={lbl}>Status</span><select value={normalizarStatus(f.status)} onChange={e=>s("status",e.target.value)} style={{...inp,padding:"7px 8px"}}>{STATUS_VALIDOS.map(k=><option key={k} value={k}>{SC[k].label}</option>)}</select></div>
             <div><span style={lbl}>Prazo</span><input type="date" value={f.prazo} onChange={e=>s("prazo",e.target.value)} style={{...inp,padding:"7px 8px"}}/></div>
           </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <span style={lbl}>Arquivamento</span>
+              <select value={f.arquivado ? (f.situacaoArquivo||"arquivado") : ""} onChange={e=>{
+                const v=e.target.value;
+                if(!v){ s("arquivado",false); s("situacaoArquivo",null); }
+                else { setF(x=>({...x, arquivado:true, situacaoArquivo:v})); }
+              }} style={{...inp,padding:"7px 8px"}}>
+                <option value="">Não arquivado (ativo)</option>
+                <option value="baixado_definitivo">Arquivado — Baixado definitivamente</option>
+                <option value="ag_prescricao">Arquivado — Aguardando prescrição</option>
+                <option value="arquivado">Arquivado — Outro motivo</option>
+              </select>
+            </div>
+            <div><span style={lbl}>Link do Google Drive</span><input value={f.driveLink||""} onChange={e=>s("driveLink",e.target.value)} style={inp} placeholder="Cole o link da pasta…"/></div>
+          </div>
+
+          <div><span style={lbl}>Observações</span><textarea value={f.obs||""} onChange={e=>s("obs",e.target.value)} style={{...inp,minHeight:70,resize:"vertical",fontFamily:"inherit"}} placeholder="Anotações internas sobre o processo…"/></div>
         </div>
         <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={btnSec}>Cancelar</button>
