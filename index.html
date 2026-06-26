@@ -5206,28 +5206,34 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
           carregarSeguro("demandas"),
           carregarSeguro("configuracoes"),
         ]);
-        // Merge inteligente: insere apenas registros novos (por ID) que ainda não existem no banco
+        // Merge inteligente: insere os registros iniciais (por ID) que ainda não existem no banco,
+        // e retorna a lista COMPLETA (o que já existia + os recém-inseridos) para exibir na hora.
         const mergeInserir = async (tabela, registrosLocais, registrosRemoto, preparar) => {
-          if(!registrosRemoto) return registrosLocais;
-          const idsRemoto = new Set(registrosRemoto.map(r=>r.id));
+          const remoto = registrosRemoto || [];
+          const idsRemoto = new Set(remoto.map(r=>r.id));
           const novos = registrosLocais.filter(r=>!idsRemoto.has(r.id));
           if(novos.length>0){
             const preparados = novos.map(r=>preparar ? preparar(r) : {...r, user_id:uid});
-            const {error} = await sb.from(tabela).insert(preparados);
-            if(error) console.error("Erro seed", tabela, error.message);
+            const {data:inseridos, error} = await sb.from(tabela).insert(preparados).select();
+            if(error){
+              console.error("Erro seed", tabela, error.message);
+              // Mesmo se o banco recusar, mostramos os dados iniciais na tela para não ficar vazio
+              return [...remoto, ...preparados];
+            }
+            return [...remoto, ...(inseridos||preparados)];
           }
-          return registrosRemoto;
+          return remoto;
         };
 
         const cltsFinais = await mergeInserir("clientes", CLIENTES0, clts, c=>({...c, user_id:uid}));
-        setClientes(cltsFinais || CLIENTES0);
+        setClientes(cltsFinais.length ? cltsFinais : CLIENTES0);
 
         const procsPreparar = p=>({...p, status:normalizarStatus(p.status), user_id:uid,
           andamentos:JSON.stringify(p.andamentos||[]), partes:JSON.stringify(p.partes||[]),
           checklist:JSON.stringify(p.checklist||{}), exitos:JSON.stringify(p.exitos||[]),
           debito:JSON.stringify(p.debito||null)});
         const procsFinais = await mergeInserir("processos", PROCS0, procs, procsPreparar);
-        if(procsFinais) {
+        if(procsFinais && procsFinais.length) {
           setProcessos(procsFinais.map(p=>({...p, andamentos:tryParse(p.andamentos,[]), partes:tryParse(p.partes,[]), checklist:tryParse(p.checklist,{}), exitos:tryParse(p.exitos,[]), debito:tryParse(p.debito,null)})));
         } else {
           setProcessos(PROCS0.map(p=>({...p, status:normalizarStatus(p.status)})));
