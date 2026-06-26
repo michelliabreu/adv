@@ -825,7 +825,7 @@ function ChecklistPanel({processo,onUpdate}){
   );
 }
 // ── Modal Detalhe Processo ────────────────────────────────
-function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia}){
+function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir}){
   const [tab,setTab]=useState("andamentos");
   const [editandoDebito,setEditandoDebito]=useState(false);
   const [novoAndDesc,setNovoAndDesc]=useState("");
@@ -1104,7 +1104,8 @@ function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSa
           {tab==="documentacao"&&<ChecklistDocumentacao processo={p} cliente={cliente} onUpdate={onChecklistUpdate} onSaveDriveLink={onSaveDriveLink}/>}
           {tab==="checklist"&&<ChecklistPanel processo={p} onUpdate={onChecklistUpdate}/>}
         </div>
-        <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
+          {onExcluir&&<button onClick={()=>{onExcluir(p.id);onClose();}} style={{...btnSec,color:"var(--red)",borderColor:"#F3B8B8",marginRight:"auto"}}>🗑 Excluir processo</button>}
           <button onClick={()=>onSavePrazo(p)} style={{...btnSec,display:"flex",alignItems:"center",gap:6}}>⏱ Analisar prazo</button>
           <button onClick={()=>onEdit(p)} style={btnSec}>Editar</button>
           <button onClick={onClose} style={btnPri}>Fechar</button>
@@ -2250,6 +2251,48 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe
     </div>
   );
 }
+function ModalAcaoLote({tipo, qtd, clientes, classificacoes, onAplicar, onClose}){
+  const [valor,setValor]=useState("");
+  const cfg = {
+    arquivar: {titulo:"Arquivar processos", label:"Situação do arquivamento", opcoes:[["baixado_definitivo","Baixado definitivamente"],["ag_prescricao","Aguardando prescrição"],["arquivado","Outro motivo"]]},
+    status: {titulo:"Mudar status", label:"Novo status", opcoes:STATUS_VALIDOS.map(k=>[k,SC[k].label])},
+    classificacao: {titulo:"Mudar classificação", label:"Nova classificação", opcoes:classificacoes.map(k=>[k,CC[k]?.label||k])},
+    responsavel: {titulo:"Atribuir responsável", label:"Responsável (digite o nome)", texto:true},
+    cliente: {titulo:"Vincular a cliente", label:"Cliente", opcoes:[...clientes].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map(c=>[String(c.id),c.nome])},
+  }[tipo];
+  if(!cfg) return null;
+
+  const aplicar = () => {
+    if(tipo==="arquivar") onAplicar({tipo:"arquivar",valor:valor||"arquivado"});
+    else if(tipo==="status") onAplicar({tipo:"status",valor});
+    else if(tipo==="classificacao") onAplicar({tipo:"classificacao",valor});
+    else if(tipo==="responsavel") onAplicar({tipo:"responsavel",valor});
+    else if(tipo==="cliente") onAplicar({tipo:"cliente",valor});
+  };
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,17,23,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:"1.5rem",width:420,maxWidth:"90vw"}}>
+        <h3 style={{fontSize:16,fontWeight:700,color:"var(--text1)",margin:"0 0 4px"}}>{cfg.titulo}</h3>
+        <p style={{fontSize:12.5,color:"var(--text2)",margin:"0 0 16px"}}>Aplicar a <strong>{qtd}</strong> processo(s) selecionado(s).</p>
+        <label style={{fontSize:11,fontWeight:600,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:6}}>{cfg.label}</label>
+        {cfg.texto ? (
+          <input autoFocus value={valor} onChange={e=>setValor(e.target.value)} placeholder="Ex: Beatriz" style={{...inp,marginBottom:18}}/>
+        ) : (
+          <select autoFocus value={valor} onChange={e=>setValor(e.target.value)} style={{...inp,marginBottom:18}}>
+            <option value="">{tipo==="cliente"?"Nenhum (desvincular)":"Selecione…"}</option>
+            {cfg.opcoes.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+          </select>
+        )}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={btnSec}>Cancelar</button>
+          <button onClick={aplicar} disabled={!cfg.texto && tipo!=="cliente" && tipo!=="arquivar" && !valor} style={{...btnPri,opacity:(!cfg.texto && tipo!=="cliente" && tipo!=="arquivar" && !valor)?.5:1}}>Aplicar a {qtd}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setMapas,onNovoCliente,abrirProcessoId,onProcessoAberto,tarefas,setTarefas,setAgenda,setParcelas,classificacoesCustom,setClassificacoesCustom}){
   const [aba,setAba]=useState("em_andamento");
   const [busca,setBusca]=useState("");
@@ -2269,6 +2312,9 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const [updateState,setUpdateState]=useState({});
   const [erroDetalheAberto,setErroDetalheAberto]=useState(null);
   const [colandoMovPara,setColandoMovPara]=useState(null);
+  const [selecionados,setSelecionados]=useState(new Set());
+  const [modoSelecao,setModoSelecao]=useState(false);
+  const [acaoLote,setAcaoLote]=useState(null); // qual modal de ação em lote está aberto
 
   React.useEffect(()=>{
     if(abrirProcessoId){
@@ -2279,6 +2325,47 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   },[abrirProcessoId]);
 
   const clienteDe = p => clientes.find(c=>c.id===p.clienteId);
+
+  // ── Exclusão e ações em lote ──────────────────────────────
+  const excluirProcesso = (id) => {
+    const p = processos.find(x=>x.id===id);
+    const nome = p ? (p.numero || p.autor || "este processo") : "este processo";
+    if(!confirm(`Excluir ${nome}? Esta ação não pode ser desfeita.`)) return;
+    setProcessos(ps=>ps.filter(x=>x.id!==id));
+    setSelected(null);
+  };
+
+  const toggleSelecionado = (id) => {
+    setSelecionados(prev=>{
+      const n = new Set(prev);
+      if(n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const limparSelecao = () => { setSelecionados(new Set()); setModoSelecao(false); setAcaoLote(null); };
+
+  const aplicarLote = (mudanca) => {
+    const ids = selecionados;
+    if(mudanca === "excluir"){
+      if(!confirm(`Excluir ${ids.size} processo(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+      setProcessos(ps=>ps.filter(p=>!ids.has(p.id)));
+      limparSelecao();
+      return;
+    }
+    setProcessos(ps=>ps.map(p=>{
+      if(!ids.has(p.id)) return p;
+      if(mudanca.tipo==="arquivar") return {...p, arquivado:true, situacaoArquivo: mudanca.valor||"arquivado"};
+      if(mudanca.tipo==="desarquivar") return {...p, arquivado:false, situacaoArquivo:null};
+      if(mudanca.tipo==="status") return {...p, status: mudanca.valor};
+      if(mudanca.tipo==="classificacao") return {...p, classificacao: mudanca.valor};
+      if(mudanca.tipo==="responsavel") return {...p, responsavel: mudanca.valor};
+      if(mudanca.tipo==="cliente") return {...p, clienteId: mudanca.valor?parseInt(mudanca.valor):"" };
+      return p;
+    }));
+    limparSelecao();
+  };
+
   const updateChecklist=updated=>{setProcessos(ps=>ps.map(p=>p.id===updated.id?updated:p));setSelected(updated);};
   const saveDebito=(id,info,parcelasGeradas)=>{
     setProcessos(ps=>ps.map(p=>p.id===id?{...p,debito:info}:p));
@@ -2515,6 +2602,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   },[processos,aba,busca,filtroCliente,filtroAno,filtroClassificacao,filtroSistema,filtroVara,filtroResponsavel]);
   const salvar=form=>{setProcessos(ps=>form.id?ps.map(p=>p.id===form.id?form:p):[...ps,{...form,id:Date.now(),andamentos:[],documentos:[]}]);setEditando(null);setNovo(false);};
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
+  const btnLote={fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:5,border:"none",background:"rgba(255,255,255,.15)",color:"#fff",cursor:"pointer",whiteSpace:"nowrap"};
 
   return(
     <div>
@@ -2544,8 +2632,26 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           <button onClick={()=>setFiltrosAbertos(v=>!v)} style={{fontSize:11,padding:"6px 12px",cursor:"pointer",borderRadius:5,border:`1px solid ${filtrosAtivos>0?"var(--accent)":"var(--border2)"}`,background:filtrosAtivos>0?"var(--accent-light)":"#fff",color:filtrosAtivos>0?"var(--accent)":"var(--text2)",fontWeight:600,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}>
             ⚙ Filtros{filtrosAtivos>0&&<span style={{background:"var(--accent)",color:"#fff",borderRadius:8,padding:"0 6px",fontSize:9.5}}>{filtrosAtivos}</span>}
           </button>
+          <button onClick={()=>{ if(modoSelecao) limparSelecao(); else setModoSelecao(true); }} style={{fontSize:11,padding:"6px 12px",cursor:"pointer",borderRadius:5,border:`1px solid ${modoSelecao?"var(--accent)":"var(--border2)"}`,background:modoSelecao?"var(--accent-light)":"#fff",color:modoSelecao?"var(--accent)":"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>
+            {modoSelecao?"✕ Cancelar":"☑ Selecionar"}
+          </button>
         </div>
       </div>
+
+      {modoSelecao && selecionados.size>0 && (
+        <div style={{background:"var(--navy)",borderRadius:8,padding:"10px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+          <span style={{fontSize:12.5,fontWeight:600,color:"#fff"}}>{selecionados.size} processo(s) selecionado(s)</span>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            <button onClick={()=>setAcaoLote("arquivar")} style={btnLote}>📦 Arquivar</button>
+            <button onClick={()=>aplicarLote({tipo:"desarquivar"})} style={btnLote}>📂 Desarquivar</button>
+            <button onClick={()=>setAcaoLote("status")} style={btnLote}>🔄 Status</button>
+            <button onClick={()=>setAcaoLote("classificacao")} style={btnLote}>🏷 Classificação</button>
+            <button onClick={()=>setAcaoLote("responsavel")} style={btnLote}>👤 Responsável</button>
+            <button onClick={()=>setAcaoLote("cliente")} style={btnLote}>🔗 Cliente</button>
+            <button onClick={()=>aplicarLote("excluir")} style={{...btnLote,background:"#DC2626",color:"#fff"}}>🗑 Excluir</button>
+          </div>
+        </div>
+      )}
 
       {filtrosAbertos&&(
         <div style={{background:"#fff",border:"1px solid var(--border1)",borderTop:"none",borderRadius:"0 0 8px 8px",padding:"14px",marginBottom:12}}>
@@ -2616,8 +2722,13 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           const pp=p.prazoProcessual;
           const cli = clienteDe(p);
           return(
-            <div key={p.id} style={{borderBottom:i<lista.length-1?"1px solid var(--border1)":"none",background:urg?"rgba(185,28,28,.03)":"transparent"}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1.3fr 1fr .95fr .85fr .9fr",padding:"11px 14px",alignItems:"start"}}>
+            <div key={p.id} style={{borderBottom:i<lista.length-1?"1px solid var(--border1)":"none",background:selecionados.has(p.id)?"var(--accent-light)":urg?"rgba(185,28,28,.03)":"transparent",display:"flex",alignItems:"stretch"}}>
+              {modoSelecao&&(
+                <div style={{display:"flex",alignItems:"center",padding:"0 4px 0 14px"}}>
+                  <input type="checkbox" checked={selecionados.has(p.id)} onChange={()=>toggleSelecionado(p.id)} style={{width:17,height:17,cursor:"pointer"}}/>
+                </div>
+              )}
+              <div style={{flex:1,display:"grid",gridTemplateColumns:"2fr 1.3fr 1fr .95fr .85fr .9fr",padding:"11px 14px",alignItems:"start"}}>
                 <div style={{cursor:"pointer"}} onClick={()=>setSelected(p)}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                     <p style={{fontSize:10,fontFamily:"monospace",color:"var(--text2)",margin:0}}>{p.numero}</p>
@@ -2702,6 +2813,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
                   <button onClick={()=>abrirAnalisePrazo(p)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #C4B5FD",background:"var(--purple-bg)",color:"var(--purple)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>⏱ Prazo IA</button>
                   {pp?.ativo&&<button onClick={()=>{if(confirm(`Marcar o prazo "${pp.proximoAto}" como cumprido?\n\nO status do processo mudará para "Em Andamento".`)) cumprirPrazo(p.id);}} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #A8DDB8",background:"var(--green-bg)",color:"var(--green)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>✓ Cumprido</button>}
                   {us.loading?<span style={{fontSize:9,color:"var(--text2)"}}>Buscando…</span>:us.erro?<button onClick={()=>setErroDetalheAberto({proc:p, erro:us.erro})} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #F3B8B8",background:"var(--red-bg)",color:"var(--red)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>⚠ Erro — ver</button>:us.done&&us.novos>0?<button onClick={()=>atualizarProcesso(p.id)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--accent)",background:"var(--accent-light)",color:"var(--navy2)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>↻ {us.novos} novo(s)</button>:<button onClick={()=>setColandoMovPara(p)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--text2)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>📋 Colar mov.</button>}
+                  <button onClick={()=>excluirProcesso(p.id)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #F3B8B8",background:"none",color:"var(--red)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>🗑 Excluir</button>
                 </div>
               </div>
             </div>
@@ -2709,7 +2821,8 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
         })}
       </div>
       <p style={{fontSize:11,color:"var(--text2)",marginTop:8,textAlign:"right"}}>{lista.length} registro(s)</p>
-      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddTarefaProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} tarefasDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirTarefaProc={concluirTarefaProc} onArquivarTarefaProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia}/>}
+      {acaoLote&&<ModalAcaoLote tipo={acaoLote} qtd={selecionados.size} clientes={clientes} classificacoes={[...CLASSIFICACOES_VALIDAS,...(classificacoesCustom||[])]} onAplicar={aplicarLote} onClose={()=>setAcaoLote(null)}/>}
+      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddTarefaProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} tarefasDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirTarefaProc={concluirTarefaProc} onArquivarTarefaProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia} onExcluir={excluirProcesso}/>}
       {(editando||novo)&&<ModalFormProc processo={editando} clientes={clientes} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}} onNovoCliente={onNovoCliente} classificacoesCustom={classificacoesCustom||[]} onNovaClassificacao={nova=>{ if(setClassificacoesCustom) setClassificacoesCustom(cs=>cs.includes(nova)?cs:[...cs,nova]); }}/>}
       {mapaProc&&<ModalMapa proc={mapaProc} mapaData={mapas[mapaProc.id]||defaultMap()} onChange={data=>setMapas(m=>({...m,[mapaProc.id]:data}))} onClose={()=>setMapaProc(null)}/>}
       {analisandoPrazo&&<ModalConfirmarPrazo proc={analisandoPrazo} sugestao={sugestaoPrazo} dataAndamento={[...(analisandoPrazo.andamentos||[])].sort((a,b)=>b.data.localeCompare(a.data))[0]?.data||""} onConfirm={salvarPrazo} onClose={()=>{setAnalisandoPrazo(null);setSugestaoPrazo(null);}}/>}
@@ -5243,6 +5356,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const uid = sessao?.user?.id;
   const [erroCarga,setErroCarga]=useState("");
   const tryParse = (val, fallback) => { try { return val ? (typeof val==="string" ? JSON.parse(val) : val) : fallback; } catch(_){ return fallback; } };
+  const prevIds = React.useRef({}); // snapshot dos IDs conhecidos de cada tabela (para exclusão segura)
 
   // ── Carregar dados do Supabase na inicialização ──────────
   React.useEffect(()=>{
@@ -5307,6 +5421,17 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
           if(c.tipos_extra) setTiposExtraCustom(tryParse(c.tipos_extra,[]));
           if(c.classificacoes_custom) setClassificacoesCustom(tryParse(c.classificacoes_custom,[]));
         }
+
+        // Inicializa o snapshot de IDs conhecidos (para exclusão segura no auto-save)
+        const setIds = arr => new Set((arr||[]).map(r=>r.id).filter(Boolean));
+        prevIds.current = {
+          processos: setIds(procsFinais),
+          clientes: setIds(cltsFinais),
+          parcelas: setIds(parcRows),
+          tarefas: setIds(tarefRows),
+          agenda: setIds(agRows),
+          demandas: setIds(demRows),
+        };
       } catch(e){
         console.error("Erro ao carregar dados:", e);
         setErroCarga(e.message || "Erro desconhecido ao carregar os dados.");
@@ -5316,29 +5441,44 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   },[uid]);
 
   // ── Auto-save: salva no Supabase quando dados mudam ─────
+  // SEGURO: nunca apaga em massa. Apenas insere/atualiza (upsert).
+  // Exclusões são feitas explicitamente pela função excluirDoBanco.
   const saveTimer = React.useRef({});
   const autoSave = React.useCallback((tabela, dados, delay=1200) => {
     if(carregandoDados) return;
+    if(!Array.isArray(dados)) return;
     clearTimeout(saveTimer.current[tabela]);
     setSincStatus("salvando");
     saveTimer.current[tabela] = setTimeout(async()=>{
       try {
-        if(Array.isArray(dados)){
+        // Salva (insere ou atualiza) todos os itens atuais
+        if(dados.length>0){
           const comUser = dados.map(d=>({...d, user_id:uid,
             andamentos: d.andamentos!==undefined ? JSON.stringify(d.andamentos) : undefined,
             partes: d.partes!==undefined ? JSON.stringify(d.partes) : undefined,
             checklist: d.checklist!==undefined ? JSON.stringify(d.checklist) : undefined,
             exitos: d.exitos!==undefined ? JSON.stringify(d.exitos) : undefined,
             debito: d.debito!==undefined ? JSON.stringify(d.debito) : undefined,
+            documentos: d.documentos!==undefined ? JSON.stringify(d.documentos) : undefined,
           }));
           const { error } = await sb.from(tabela).upsert(comUser, {onConflict:"id"});
           if(error) throw error;
-          // Remove itens deletados (que não estão mais no array)
-          const ids = dados.map(d=>d.id).filter(Boolean);
-          if(ids.length>0){
-            await sb.from(tabela).delete().eq("user_id",uid).not("id","in",`(${ids.join(",")})`);
+        }
+
+        // Exclusão SEGURA: só remove do banco os itens que ESTAVAM na tela
+        // e foram removidos pelo usuário nesta sessão (comparação com snapshot anterior).
+        // Nunca apaga com base apenas no array atual estar vazio.
+        const idsAtuais = new Set(dados.map(d=>d.id).filter(Boolean));
+        const idsAnteriores = prevIds.current[tabela];
+        if(idsAnteriores && idsAnteriores.size>0){
+          const removidos = [...idsAnteriores].filter(id=>!idsAtuais.has(id));
+          // Só apaga se a remoção for "pequena" (ação real do usuário), nunca um esvaziamento total
+          if(removidos.length>0 && removidos.length < idsAnteriores.size){
+            await sb.from(tabela).delete().eq("user_id",uid).in("id",removidos);
           }
         }
+        prevIds.current[tabela] = idsAtuais;
+
         setSincStatus("salvo");
         setTimeout(()=>setSincStatus(""),2500);
       } catch(e){ setSincStatus("erro"); console.error("Erro ao salvar:", tabela, e); }
