@@ -30,6 +30,10 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
+.proc-row .proc-actions{opacity:0;pointer-events:none;transition:opacity .12s}
+.proc-row:hover{background:var(--bg2)!important}
+.proc-row:hover .proc-actions{opacity:1;pointer-events:auto}
+.proc-actions button:hover{background:var(--bg3)!important}
 body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F9FB;color:#0F1117;font-size:13px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 h1,h2,h3{font-family:'Inter',sans-serif;letter-spacing:-.02em;}
 :root{
@@ -2603,6 +2607,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const salvar=form=>{setProcessos(ps=>form.id?ps.map(p=>p.id===form.id?form:p):[...ps,{...form,id:Date.now(),andamentos:[],documentos:[]}]);setEditando(null);setNovo(false);};
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
   const btnLote={fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:5,border:"none",background:"rgba(255,255,255,.15)",color:"#fff",cursor:"pointer",whiteSpace:"nowrap"};
+  const btnIcon={fontSize:13,width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",borderRadius:6,border:"1px solid var(--border1)",background:"#fff",padding:0,lineHeight:1};
 
   return(
     <div>
@@ -2709,9 +2714,9 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
         </div>
       )}
 
-      <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2fr 1.3fr 1fr .95fr .85fr .9fr",padding:"9px 14px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)"}}>
-          {["Processo / Cliente / Movimentação","Vara","Tarefas","Prazo","Status","Ações"].map(h=><span key={h} style={hdr}>{h}</span>)}
+      <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"2.4fr 1.4fr 1.4fr .8fr .5fr",padding:"11px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:14}}>
+          {["Processo","Cliente","Ação / Foro","Últ. mov.","Status"].map(h=><span key={h} style={hdr}>{h}</span>)}
         </div>
         {lista.length===0?<div style={{padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum processo encontrado.</div>:lista.map((p,i)=>{
           const urg=isUrgProc(p),dias=p.prazo?diasRest(p.prazo):0;
@@ -2722,99 +2727,83 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           const pp=p.prazoProcessual;
           const cli = clienteDe(p);
           return(
-            <div key={p.id} style={{borderBottom:i<lista.length-1?"1px solid var(--border1)":"none",background:selecionados.has(p.id)?"var(--accent-light)":urg?"rgba(185,28,28,.03)":"transparent",display:"flex",alignItems:"stretch"}}>
+            <div key={p.id} className="proc-row" style={{borderBottom:i<lista.length-1?"1px solid var(--border1)":"none",background:selecionados.has(p.id)?"var(--accent-light)":"transparent",display:"flex",alignItems:"stretch",position:"relative",transition:"background .12s"}}>
               {modoSelecao&&(
-                <div style={{display:"flex",alignItems:"center",padding:"0 4px 0 14px"}}>
-                  <input type="checkbox" checked={selecionados.has(p.id)} onChange={()=>toggleSelecionado(p.id)} style={{width:17,height:17,cursor:"pointer"}}/>
+                <div style={{display:"flex",alignItems:"center",padding:"0 2px 0 16px"}}>
+                  <input type="checkbox" checked={selecionados.has(p.id)} onChange={()=>toggleSelecionado(p.id)} style={{width:16,height:16,cursor:"pointer"}}/>
                 </div>
               )}
-              <div style={{flex:1,display:"grid",gridTemplateColumns:"2fr 1.3fr 1fr .95fr .85fr .9fr",padding:"11px 14px",alignItems:"start"}}>
-                <div style={{cursor:"pointer"}} onClick={()=>setSelected(p)}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                    <p style={{fontSize:10,fontFamily:"monospace",color:"var(--text2)",margin:0}}>{p.numero}</p>
-                    {p.sistema&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"var(--accent-light)",color:"var(--accent)",textTransform:"uppercase",letterSpacing:".3px"}}>{p.sistema}</span>}
-                    {p.arquivado&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"var(--bg2)",color:"var(--text2)",textTransform:"uppercase",letterSpacing:".3px"}}>📦 {p.situacaoArquivo==="baixado_definitivo"?"Baixado":p.situacaoArquivo==="ag_prescricao"?"Ag. Prescrição":"Arquivado"}</span>}
-                    {(()=>{
-                      const qtdPendente = (tarefas||[]).filter(t=>t.procId===p.id && !t.arquivada && t.status!=="concluido").length;
-                      if(qtdPendente===0) return null;
-                      return <span style={{fontSize:9,fontWeight:700,padding:"1px 7px",borderRadius:3,background:"var(--amber-bg)",color:"var(--amber)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>📌 {qtdPendente} tarefa{qtdPendente>1?"s":""} pendente{qtdPendente>1?"s":""}</span>;
-                    })()}
-                  </div>
+              <div style={{flex:1,display:"grid",gridTemplateColumns:"2.4fr 1.4fr 1.4fr .8fr .5fr",padding:"14px 18px",alignItems:"center",gap:14,cursor:"pointer"}} onClick={()=>setSelected(p)}>
+
+                {/* Coluna 1: Partes + número */}
+                <div style={{minWidth:0}}>
                   {(()=>{
                     const {nomeCliente, adversa} = clientePrincipalEAdversa(p, clientes);
-                    const multiAutor = nomesPorPolo(p,"autor").length>1, multiReu = nomesPorPolo(p,"reu").length>1;
+                    const multi = nomesPorPolo(p,"autor").length>1 || nomesPorPolo(p,"reu").length>1;
                     return (
-                      <React.Fragment>
-                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
-                          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4,background:"var(--accent-light)",color:"var(--accent)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>Cliente</span>
-                          <span style={{fontSize:14,fontWeight:700,color:"var(--text1)"}}>{nomeCliente}</span>
-                        </div>
-                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
-                          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4,background:"var(--bg3)",color:"var(--text2)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>Parte adversa</span>
-                          <span style={{fontSize:12.5,fontWeight:600,color:"var(--text2)"}}>{adversa}</span>
-                          {(multiAutor||multiReu)&&<span style={{fontSize:9,color:"var(--text3)",fontStyle:"italic"}}>(litisconsórcio)</span>}
-                        </div>
-                      </React.Fragment>
+                      <p style={{fontSize:13.5,fontWeight:600,color:"var(--text1)",margin:"0 0 3px",lineHeight:1.35}}>
+                        {nomeCliente} <span style={{color:"var(--text3)",fontWeight:400}}>×</span> {adversa}
+                        {multi&&<span style={{fontSize:10,color:"var(--text3)",fontWeight:400}}> +litisc.</span>}
+                      </p>
                     );
                   })()}
-                  {p.assunto&&<p style={{fontSize:11,color:"var(--accent)",fontWeight:600,margin:"0 0 7px"}}>📌 {p.assunto}</p>}
-                  {ultimaDecisao&&<div style={{marginBottom:4}}>
-                    <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".5px",color:"var(--amber)",background:"var(--amber-bg)",padding:"1px 5px",borderRadius:3,marginRight:5,fontWeight:700}}>Última decisão</span>
-                    <span style={{fontSize:10,color:"var(--text2)"}}>{fmtData(ultimaDecisao.data)}</span>
-                    <p style={{fontSize:11,color:"var(--text1)",margin:"2px 0 0",lineHeight:1.35,maxWidth:280}}>{ultimaDecisao.desc.length>85?ultimaDecisao.desc.slice(0,85)+"…":ultimaDecisao.desc}</p>
-                  </div>}
-                  {ultimoAto&&ultimoAto!==ultimaDecisao&&<div style={{marginBottom:4}}>
-                    <span style={{fontSize:9,textTransform:"uppercase",letterSpacing:".5px",color:"var(--navy2)",background:"var(--accent-light)",padding:"1px 5px",borderRadius:3,marginRight:5,fontWeight:700}}>Último ato</span>
-                    <span style={{fontSize:10,color:"var(--text2)"}}>{fmtData(ultimoAto.data)}</span>
-                    <p style={{fontSize:11,color:"var(--text1)",margin:"2px 0 0",lineHeight:1.35,maxWidth:280}}>{ultimoAto.desc.length>75?ultimoAto.desc.slice(0,75)+"…":ultimoAto.desc}</p>
-                  </div>}
-                  {pp?.ativo&&<PrazoBadge prazoInfo={pp} compact={true}/>}
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:11,fontFamily:"monospace",color:"var(--text2)"}}>{p.numero}</span>
+                    {p.sistema&&<span style={{fontSize:9,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".3px"}}>{p.sistema}</span>}
+                    {p.arquivado&&<span style={{fontSize:9,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".3px"}}>· Arquivado</span>}
+                  </div>
+                  {p.assunto&&<p style={{fontSize:11,color:"var(--text2)",margin:"4px 0 0",lineHeight:1.3}}>{p.assunto}</p>}
                 </div>
-                <div style={{cursor:"pointer"}} onClick={()=>setSelected(p)}><p style={{fontSize:11,margin:"0 0 2px"}}>{p.vara}</p><p style={{fontSize:10,color:"var(--text2)",margin:0}}>{p.responsavel||"—"}</p></div>
-                <div style={{cursor:"pointer"}} onClick={()=>setSelected(p)}>
-                  {p.classificacao&&<div style={{marginBottom:5}}>{CC[p.classificacao]?<Pill bg={CC[p.classificacao].bg} color={CC[p.classificacao].color} label={CC[p.classificacao].label} sm/>:<Pill bg="var(--bg3)" color="var(--text2)" label={p.classificacao} sm/>}</div>}
-                  {(()=>{
-                    const tarefasProc = (tarefas||[]).filter(t=>t.procId===p.id && !t.arquivada && t.status!=="concluido");
-                    if(tarefasProc.length===0) return <span style={{fontSize:10.5,color:"var(--text3)"}}>—</span>;
-                    const ordenadas = [...tarefasProc].sort((a,b)=>{
-                      if(a.prazo && b.prazo) return a.prazo.localeCompare(b.prazo);
-                      if(a.prazo) return -1;
-                      if(b.prazo) return 1;
-                      return 0;
-                    });
-                    const principal = ordenadas[0];
-                    const resto = tarefasProc.length - 1;
-                    return (
-                      <div>
-                        <p style={{fontSize:11,color:"var(--text1)",margin:"0 0 2px",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{principal.titulo}</p>
-                        {resto>0&&<p style={{fontSize:9.5,color:"var(--text3)",margin:0}}>+{resto} outra{resto>1?"s":""}</p>}
-                      </div>
-                    );
-                  })()}
+
+                {/* Coluna 2: Cliente */}
+                <div style={{minWidth:0}}>
+                  <p style={{fontSize:12.5,color:"var(--text1)",margin:0,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{cli?cli.nome:"—"}</p>
                 </div>
-                <div style={{cursor:"pointer"}} onClick={()=>setSelected(p)}><p style={{fontSize:11,margin:0,color:"var(--text1)"}}>{fmtData(p.prazo)}</p></div>
-                <div style={{display:"flex",alignItems:"center",cursor:"pointer"}} onClick={()=>setSelected(p)}>
+
+                {/* Coluna 3: Ação / Foro */}
+                <div style={{minWidth:0}}>
+                  {p.classificacao&&<p style={{fontSize:12,color:"var(--text1)",margin:"0 0 2px",lineHeight:1.3}}>{CC[p.classificacao]?.label||p.classificacao}</p>}
+                  <p style={{fontSize:11,color:"var(--text2)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.vara||"—"}</p>
+                  {p.responsavel&&<p style={{fontSize:10.5,color:"var(--text3)",margin:"2px 0 0"}}>👤 {p.responsavel}</p>}
+                </div>
+
+                {/* Coluna 4: Última movimentação */}
+                <div style={{minWidth:0}}>
+                  {ultimoAto?(
+                    <React.Fragment>
+                      <p style={{fontSize:11.5,color:"var(--text1)",margin:0,fontWeight:500}}>{fmtData(ultimoAto.data)}</p>
+                      <p style={{fontSize:10,color:"var(--text3)",margin:"2px 0 0",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ultimoAto.desc}</p>
+                    </React.Fragment>
+                  ):<span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
+                  {p.prazo&&<p style={{fontSize:10.5,color:urg?"var(--red)":"var(--text2)",margin:"4px 0 0",fontWeight:urg?700:400}}>⏱ Prazo: {fmtData(p.prazo)}</p>}
+                </div>
+
+                {/* Coluna 5: Status */}
+                <div style={{display:"flex",alignItems:"center"}}>
                   {(()=>{
                     const prazoUrgente = pp?.ativo && pp.vencimento && diasRest(pp.vencimento)<=3;
                     if(prazoUrgente){
                       const vencido = diasRest(pp.vencimento)<0;
-                      return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:vencido?"var(--red-bg)":"var(--amber-bg)",color:vencido?"var(--red)":"var(--amber)",textTransform:"uppercase",letterSpacing:".4px"}}>⚠ Prazo</span>;
+                      return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:20,background:vencido?"var(--red-bg)":"var(--amber-bg)",color:vencido?"var(--red)":"var(--amber)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>⚠ Prazo</span>;
                     }
                     return (
-                      <React.Fragment>
-                        <span style={{width:7,height:7,borderRadius:"50%",background:SC[normalizarStatus(p.status)]?.dot,display:"inline-block",marginRight:5,flexShrink:0}}/>
-                        <span style={{fontSize:10,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>{SC[normalizarStatus(p.status)]?.label}</span>
-                      </React.Fragment>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:SC[normalizarStatus(p.status)]?.dot,display:"inline-block",flexShrink:0}}/>
+                        <span style={{fontSize:10,color:"var(--text2)",fontWeight:500}}>{SC[normalizarStatus(p.status)]?.label}</span>
+                      </span>
                     );
                   })()}
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-start"}}>
-                  <button onClick={()=>setMapaProc(p)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #A8DDB8",background:"var(--green-bg)",color:"var(--green)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>🗺 Mapa</button>
-                  <button onClick={()=>abrirAnalisePrazo(p)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #C4B5FD",background:"var(--purple-bg)",color:"var(--purple)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>⏱ Prazo IA</button>
-                  {pp?.ativo&&<button onClick={()=>{if(confirm(`Marcar o prazo "${pp.proximoAto}" como cumprido?\n\nO status do processo mudará para "Em Andamento".`)) cumprirPrazo(p.id);}} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #A8DDB8",background:"var(--green-bg)",color:"var(--green)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>✓ Cumprido</button>}
-                  {us.loading?<span style={{fontSize:9,color:"var(--text2)"}}>Buscando…</span>:us.erro?<button onClick={()=>setErroDetalheAberto({proc:p, erro:us.erro})} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #F3B8B8",background:"var(--red-bg)",color:"var(--red)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>⚠ Erro — ver</button>:us.done&&us.novos>0?<button onClick={()=>atualizarProcesso(p.id)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--accent)",background:"var(--accent-light)",color:"var(--navy2)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>↻ {us.novos} novo(s)</button>:<button onClick={()=>setColandoMovPara(p)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--text2)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>📋 Colar mov.</button>}
-                  <button onClick={()=>excluirProcesso(p.id)} style={{fontSize:9,padding:"3px 7px",cursor:"pointer",borderRadius:4,border:"1px solid #F3B8B8",background:"none",color:"var(--red)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,whiteSpace:"nowrap"}}>🗑 Excluir</button>
-                </div>
+              </div>
+
+              {/* Ações — aparecem ao passar o mouse */}
+              <div className="proc-actions" style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",display:"flex",gap:4,background:"#fff",boxShadow:"-8px 0 12px rgba(255,255,255,.9)",paddingLeft:8}}>
+                <button onClick={e=>{e.stopPropagation();setColandoMovPara(p);}} title="Colar movimentação" style={btnIcon}>📋</button>
+                <button onClick={e=>{e.stopPropagation();abrirAnalisePrazo(p);}} title="Analisar prazo com IA" style={btnIcon}>⏱</button>
+                <button onClick={e=>{e.stopPropagation();setMapaProc(p);}} title="Mapa do processo" style={btnIcon}>🗺</button>
+                {us.erro&&<button onClick={e=>{e.stopPropagation();setErroDetalheAberto({proc:p, erro:us.erro});}} title="Ver erro" style={{...btnIcon,color:"var(--red)"}}>⚠</button>}
+                {us.done&&us.novos>0&&<button onClick={e=>{e.stopPropagation();atualizarProcesso(p.id);}} title={`${us.novos} novo(s)`} style={{...btnIcon,color:"var(--accent)"}}>↻</button>}
+                <button onClick={e=>{e.stopPropagation();excluirProcesso(p.id);}} title="Excluir" style={{...btnIcon,color:"var(--red)"}}>🗑</button>
               </div>
             </div>
           );
