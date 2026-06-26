@@ -4058,11 +4058,62 @@ function PaginaFichaAtendimento({clientes, setClientes, processos, setProcessos,
   );
 }
 
-function PaginaImportacao({onImportar}){
+function PaginaImportacao({onImportar, uid, processos, clientes, setProcessos, setClientes}){
   const [texto,setTexto]=useState("");
   const [resultado,setResultado]=useState(null);
   const [loading,setLoading]=useState(false);
   const [erro,setErro]=useState("");
+  const [restLoading,setRestLoading]=useState(false);
+  const [restMsg,setRestMsg]=useState("");
+
+  const restaurarProcessos = async () => {
+    setRestLoading(true); setRestMsg("");
+    try {
+      const tryParse = (val, fb) => { try { return val ? (typeof val==="string"?JSON.parse(val):val) : fb; } catch(_){ return fb; } };
+      // 1. Buscar o que já existe no banco
+      const { data: procsBanco, error: e1 } = await sb.from("processos").select("id");
+      const { data: cltsBanco, error: e2 } = await sb.from("clientes").select("id");
+      if(e1) throw new Error("Erro ao ler processos: " + e1.message);
+      if(e2) throw new Error("Erro ao ler clientes: " + e2.message);
+
+      const idsProcsBanco = new Set((procsBanco||[]).map(r=>r.id));
+      const idsCltsBanco = new Set((cltsBanco||[]).map(r=>r.id));
+
+      // 2. Preparar clientes que faltam
+      const cltsFaltando = CLIENTES0.filter(c=>!idsCltsBanco.has(c.id)).map(c=>({...c, user_id:uid}));
+      let nClientes = 0;
+      if(cltsFaltando.length>0){
+        const { data: insC, error: ec } = await sb.from("clientes").insert(cltsFaltando).select();
+        if(ec) throw new Error("Erro ao inserir clientes: " + ec.message);
+        nClientes = (insC||cltsFaltando).length;
+      }
+
+      // 3. Preparar processos que faltam
+      const procsFaltando = PROCS0.filter(p=>!idsProcsBanco.has(p.id)).map(p=>({
+        ...p, status:normalizarStatus(p.status), user_id:uid,
+        andamentos:JSON.stringify(p.andamentos||[]), partes:JSON.stringify(p.partes||[]),
+        checklist:JSON.stringify(p.checklist||{}), exitos:JSON.stringify(p.exitos||[]),
+        debito:JSON.stringify(p.debito||null), documentos:JSON.stringify(p.documentos||[]),
+      }));
+      let nProcs = 0;
+      if(procsFaltando.length>0){
+        const { data: insP, error: ep } = await sb.from("processos").insert(procsFaltando).select();
+        if(ep) throw new Error("Erro ao inserir processos: " + ep.message);
+        nProcs = (insP||procsFaltando).length;
+      }
+
+      // 4. Recarregar tudo do banco e atualizar a tela
+      const { data: todosProcs } = await sb.from("processos").select("*");
+      const { data: todosClts } = await sb.from("clientes").select("*");
+      if(todosClts) setClientes(todosClts);
+      if(todosProcs) setProcessos(todosProcs.map(p=>({...p, andamentos:tryParse(p.andamentos,[]), partes:tryParse(p.partes,[]), checklist:tryParse(p.checklist,{}), exitos:tryParse(p.exitos,[]), debito:tryParse(p.debito,null)})));
+
+      setRestMsg(`✓ Pronto! ${nProcs} processo(s) e ${nClientes} cliente(s) restaurado(s). Vá para a tela de Processos para ver.`);
+    } catch(e){
+      setRestMsg("✗ " + (e.message || "Erro ao restaurar.") + " — Me envie esta mensagem para eu corrigir.");
+    }
+    setRestLoading(false);
+  };
   const processar=async()=>{
     if(!texto.trim()){setErro("Cole o texto antes de processar.");return;}
     setErro("");setLoading(true);setResultado(null);
@@ -4090,6 +4141,14 @@ function PaginaImportacao({onImportar}){
         <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Importar processos</h1>
         <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>Cole um relatório em texto livre e deixe a IA estruturar os dados</p>
       </div>
+
+      <div style={{background:"#FFF8E6",border:"1px solid #FDE68A",borderRadius:8,padding:"1.25rem",marginBottom:14}}>
+        <p style={{fontSize:13,fontWeight:700,color:"#92400E",margin:"0 0 6px"}}>🔄 Restaurar processos iniciais</p>
+        <p style={{fontSize:12,color:"#78350F",margin:"0 0 12px",lineHeight:1.6}}>Se os 53 processos cadastrados não estão aparecendo, clique abaixo para reinseri-los no banco. Não duplica nada que você já tenha — insere só o que está faltando.</p>
+        {restMsg && <p style={{fontSize:12,margin:"0 0 10px",padding:"8px 12px",borderRadius:5,background:restMsg.startsWith("✓")?"var(--green-bg)":"var(--red-bg)",color:restMsg.startsWith("✓")?"var(--green)":"var(--red)",lineHeight:1.5}}>{restMsg}</p>}
+        <button onClick={restaurarProcessos} disabled={restLoading} style={{...btnPri,fontSize:12,background:"#B45309",opacity:restLoading?.7:1}}>{restLoading?"Restaurando…":"🔄 Restaurar 53 processos e 35 clientes"}</button>
+      </div>
+
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"1.25rem",marginBottom:14}}>
         <p style={{fontSize:12,color:"var(--text2)",margin:"0 0 14px",lineHeight:1.6}}>Cole o texto do relatório (qualquer formato). A IA identifica os dados automaticamente. <strong style={{color:"var(--text1)"}}>Os processos existentes serão substituídos.</strong> Vincule o cliente manualmente depois, na tela de Processos.</p>
         <textarea value={texto} onChange={e=>setTexto(e.target.value)} placeholder="Cole aqui o relatório de processos..." style={{width:"100%",minHeight:180,fontSize:12,padding:"10px",borderRadius:6,border:"1px solid var(--border2)",background:"#fff",color:"var(--text1)",resize:"vertical",lineHeight:1.6,boxSizing:"border-box"}}/>
@@ -5419,7 +5478,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
           {pagina==="tarefas"&&<PaginaTarefas tarefas={tarefas} setTarefas={setTarefasSaved} equipe={equipe} processos={processos} clientes={clientes}/>}
           {pagina==="equipe"&&<PaginaEquipe equipe={equipe} setEquipe={setEquipe} tarefas={tarefas} agenda={agenda}/>}
           {pagina==="relatorios"&&<PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
-          {pagina==="importar"&&<PaginaImportacao onImportar={importar}/>}
+          {pagina==="importar"&&<PaginaImportacao onImportar={importar} uid={uid} processos={processos} clientes={clientes} setProcessos={setProcessosSaved} setClientes={setClientesSaved}/>}
         </div>
       </div>
 
