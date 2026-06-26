@@ -166,18 +166,27 @@ function clientePrincipalEAdversa(p, clientes){
     const parteComCliente = p.partes.find(x=>x.clienteId);
     if(parteComCliente){
       const cli = clientes.find(c=>c.id===parteComCliente.clienteId);
-      const outras = p.partes.filter(x=>x.id!==parteComCliente.id).map(x=>x.nome).filter(Boolean);
-      return { nomeCliente: cli?cli.nome:parteComCliente.nome, adversa: outras.join(" e ") || "—", clienteObj: cli||null };
+      // Polo do cliente x polo oposto. Litisconsortes do mesmo polo viram "e outros".
+      const poloCliente = parteComCliente.polo;
+      const poloAdverso = poloCliente==="autor" ? "reu" : "autor";
+      const mesmosPolo = p.partes.filter(x=>x.polo===poloCliente && x.nome).length;
+      const adversos = p.partes.filter(x=>x.polo===poloAdverso).map(x=>x.nome).filter(Boolean);
+      const nomeCli = cli ? cli.nome : parteComCliente.nome;
+      const nomeClienteExib = mesmosPolo>1 ? `${nomeCli} e outros` : nomeCli;
+      const adversaExib = adversos.length>1 ? `${adversos[0]} e outros` : (adversos[0]||"—");
+      return { nomeCliente: nomeClienteExib, adversa: adversaExib, clienteObj: cli||null, nomeClienteSimples: nomeCli };
     }
-    // sem cliente vinculado em nenhuma parte: usa o primeiro autor como referência
+    // sem cliente vinculado: usa autor x réu como referência
     const autores = nomesPorPolo(p,"autor"), reus = nomesPorPolo(p,"reu");
-    return { nomeCliente: autores.join(" e ")||"—", adversa: reus.join(" e ")||"—", clienteObj: null };
+    const autorExib = autores.length>1 ? `${autores[0]} e outros` : (autores[0]||"—");
+    const reuExib = reus.length>1 ? `${reus[0]} e outros` : (reus[0]||"—");
+    return { nomeCliente: autorExib, adversa: reuExib, clienteObj: null, nomeClienteSimples: autores[0]||"" };
   }
   // formato legado (sem lista de partes)
   const cli = p.clienteId ? clientes.find(c=>c.id===p.clienteId) : null;
   const nomeCli = cli ? cli.nome : (p.autor||"—");
   const adversa = cli ? (cli.nome===p.autor ? (p.reu||"—") : (p.autor||"—")) : (p.reu||"—");
-  return { nomeCliente: nomeCli, adversa, clienteObj: cli };
+  return { nomeCliente: nomeCli, adversa, clienteObj: cli, nomeClienteSimples: nomeCli };
 }
 
 const CC = {
@@ -798,14 +807,29 @@ function ChecklistDocumentacao({processo, cliente, onUpdate, onSaveDriveLink}){
 function ChecklistPanel({processo,onUpdate}){
   const items=CHECKLISTS[processo.classificacao];
   const checklist=processo.checklist||{};
-  if(!items)return<div style={{fontSize:13,color:"var(--text2)",padding:"12px 0"}}>Nenhum checklist disponível.</div>;
+  const [obsLocal,setObsLocal]=useState(processo.obs||"");
+  React.useEffect(()=>{ setObsLocal(processo.obs||""); },[processo.id]);
+  const salvarObs=()=>{ if(obsLocal!==(processo.obs||"")) onUpdate({...processo,obs:obsLocal}); };
+
+  const blocoObs = (
+    <div style={{marginBottom:18}}>
+      <p style={{fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",margin:"0 0 6px"}}>Observações</p>
+      <textarea value={obsLocal} onChange={e=>setObsLocal(e.target.value)} onBlur={salvarObs} placeholder="Anotações livres sobre o processo, estratégia, lembretes…" style={{width:"100%",minHeight:90,fontSize:12.5,padding:"10px 12px",borderRadius:6,border:"1px solid var(--border1)",background:"#fff",color:"var(--text1)",resize:"vertical",lineHeight:1.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
+      <p style={{fontSize:10,color:"var(--text3)",margin:"4px 0 0"}}>Salvo automaticamente ao clicar fora.</p>
+    </div>
+  );
+
+  const cfg=CC[processo.classificacao];
+  if(!items || !cfg){
+    return <div>{blocoObs}<p style={{fontSize:11.5,color:"var(--text3)",margin:0}}>Não há checklist pré-definido para esta classificação. Use o campo de observações acima.</p></div>;
+  }
   const total=items.length,done=items.filter(i=>checklist[i.id]?.checked).length,pct=Math.round((done/total)*100);
   const toggle=id=>{const u={...checklist,[id]:{...checklist[id],checked:!checklist[id]?.checked}};onUpdate({...processo,checklist:u});};
   const setObs=(id,obs)=>{const u={...checklist,[id]:{...checklist[id],obs}};onUpdate({...processo,checklist:u});};
-  const cfg=CC[processo.classificacao];
-  if(!cfg) return null;
   return(
     <div>
+      {blocoObs}
+      <p style={{fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",margin:"0 0 10px"}}>Checklist da ação</p>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
         <Pill bg={cfg.bg} color={cfg.color} label={cfg.label}/>
         <div style={{flex:1,height:6,background:"var(--bg2)",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct===100?"var(--green)":"var(--accent)",borderRadius:3,transition:"width .3s"}}/></div>
@@ -829,7 +853,7 @@ function ChecklistPanel({processo,onUpdate}){
   );
 }
 // ── Modal Detalhe Processo ────────────────────────────────
-function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir}){
+function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir,onSaveCampo}){
   const [tab,setTab]=useState("andamentos");
   const [editandoDebito,setEditandoDebito]=useState(false);
   const [novoAndDesc,setNovoAndDesc]=useState("");
@@ -846,6 +870,8 @@ function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSa
   const [registrandoExito,setRegistrandoExito]=useState(false);
   const [enviandoCobranca,setEnviandoCobranca]=useState(null);
   const [editandoAudiencia,setEditandoAudiencia]=useState(false);
+  const [editandoPrazo,setEditandoPrazo]=useState(false);
+  const [prazoForm,setPrazoForm]=useState(p.prazo||"");
   const [audienciaData,setAudienciaData]=useState(p.audiencia?.data||"");
   const [audienciaHora,setAudienciaHora]=useState(p.audiencia?.hora||"");
   const [audienciaLocal,setAudienciaLocal]=useState(p.audiencia?.local||"");
@@ -861,7 +887,7 @@ function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSa
             {cliente && <p style={{fontSize:17,fontWeight:700,margin:"0 0 4px",color:"var(--navy)"}}>👤 {cliente.nome}</p>}
             <p style={{fontSize:10,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".8px",margin:"0 0 5px",fontWeight:600}}>Número do processo</p>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <p style={{fontSize:15,fontWeight:700,margin:0,fontFamily:"monospace",color:"var(--navy)"}}>{p.numero}</p>
+              <p style={{fontSize:18,fontWeight:700,margin:0,color:"var(--navy)",letterSpacing:".3px"}}>{p.numero}</p>
               {p.sistema&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:"var(--accent-light)",color:"var(--accent)",textTransform:"uppercase",letterSpacing:".4px"}}>{p.sistema}</span>}
             </div>
             {cliente&&cliente.cpf&&<p style={{fontSize:11,color:"var(--text2)",margin:"4px 0 0"}}>CPF/CNPJ {cliente.cpf}</p>}
@@ -916,9 +942,21 @@ function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSa
         )}
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 24px",marginBottom:14}}>
-          {[["Vara",p.vara],["Responsável",p.responsavel||"—"],["Prazo do processo",fmtData(p.prazo)],["Valor da causa",p.valorCausa?fmtBRL(parseFloat(p.valorCausa)):"—"]].map(([k,v])=>(
-            <div key={k}><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>{k}</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{v}</p></div>
-          ))}
+          <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Vara</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.vara}</p></div>
+          <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Responsável</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.responsavel||"—"}</p></div>
+          <div>
+            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Prazo do processo</p>
+            {editandoPrazo ? (
+              <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                <input type="date" autoFocus value={prazoForm} onChange={e=>setPrazoForm(e.target.value)} style={{...inp,padding:"4px 7px",fontSize:12,flex:1}}/>
+                <button onClick={()=>{onSaveCampo(p.id,"prazo",prazoForm);setEditandoPrazo(false);}} style={{...btnPri,fontSize:10,padding:"4px 9px"}}>OK</button>
+                {prazoForm&&<button onClick={()=>{setPrazoForm("");onSaveCampo(p.id,"prazo","");setEditandoPrazo(false);}} title="Deixar sem prazo" style={{...btnSec,fontSize:10,padding:"4px 8px"}}>Limpar</button>}
+              </div>
+            ) : (
+              <p onClick={()=>{setPrazoForm(p.prazo||"");setEditandoPrazo(true);}} style={{fontSize:13,fontWeight:600,margin:0,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>{p.prazo?fmtData(p.prazo):<span style={{color:"var(--text3)",fontWeight:400}}>Sem prazo</span>} <span style={{fontSize:10,color:"var(--text3)"}}>✎</span></p>
+            )}
+          </div>
+          <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Valor da causa</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.valorCausa?fmtBRL(parseFloat(p.valorCausa)):"—"}</p></div>
         </div>
 
         {/* Débito */}
@@ -955,58 +993,42 @@ function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSa
           <button onClick={()=>{if(confirm(`Marcar o prazo "${p.prazoProcessual.proximoAto}" como cumprido?\n\nO status do processo mudará para "Em Andamento".`)) onCumprirPrazo(p.id);}} style={{...btnSec,fontSize:10.5,padding:"5px 12px",marginTop:6,borderColor:"#A8DDB8",color:"var(--green)",background:"var(--green-bg)"}}>✓ Marcar prazo como cumprido</button>
         </div>}
 
-        {/* Audiência */}
-        <div style={{marginTop:14,padding:"12px 14px",background:"var(--bg2)",borderRadius:6,border:"1px solid var(--border1)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:editandoAudiencia?10:0}}>
-            <span style={{fontSize:11,fontWeight:600,color:"var(--text1)"}}>⚖️ Audiência</span>
-            {!editandoAudiencia&&<button onClick={()=>setEditandoAudiencia(true)} style={{...btnSec,fontSize:10,padding:"3px 10px"}}>{p.audiencia?.data?"✎ Editar":"+ Agendar"}</button>}
+        {/* Audiência — só aparece quando agendada ou ao adicionar */}
+        {(p.audiencia?.data || editandoAudiencia) ? (
+          <div style={{marginTop:14,padding:"12px 14px",background:"var(--bg2)",borderRadius:6,border:"1px solid var(--border1)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:editandoAudiencia?10:0}}>
+              <span style={{fontSize:11,fontWeight:600,color:"var(--text1)"}}>⚖️ Audiência</span>
+              {!editandoAudiencia&&<button onClick={()=>setEditandoAudiencia(true)} style={{...btnSec,fontSize:10,padding:"3px 10px"}}>✎ Editar</button>}
+            </div>
+            {editandoAudiencia ? (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div><span style={{...lbl,margin:"0 0 3px"}}>Data</span><input type="date" value={audienciaData} onChange={e=>setAudienciaData(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:12}}/></div>
+                  <div><span style={{...lbl,margin:"0 0 3px"}}>Hora</span><input type="time" value={audienciaHora} onChange={e=>setAudienciaHora(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:12}}/></div>
+                </div>
+                <div><span style={{...lbl,margin:"0 0 3px"}}>Local</span><input value={audienciaLocal} onChange={e=>setAudienciaLocal(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:12}} placeholder="Ex: Vara, sala, link da videoconferência…"/></div>
+                <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+                  {p.audiencia?.data&&<button onClick={()=>{onSaveAudiencia(p.id,null);setEditandoAudiencia(false);}} style={{...btnSec,fontSize:10.5,padding:"5px 10px",color:"var(--red)"}}>Remover</button>}
+                  <button onClick={()=>setEditandoAudiencia(false)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Cancelar</button>
+                  <button onClick={()=>{
+                    if(!audienciaData) return;
+                    onSaveAudiencia(p.id, {data:audienciaData, hora:audienciaHora, local:audienciaLocal});
+                    setEditandoAudiencia(false);
+                  }} style={{...btnPri,fontSize:10.5,padding:"5px 12px"}}>Salvar</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p style={{fontSize:13,fontWeight:700,color:"var(--navy)",margin:"0 0 2px"}}>{fmtData(p.audiencia.data)}{p.audiencia.hora?` às ${p.audiencia.hora}`:""}</p>
+                {p.audiencia.local&&<p style={{fontSize:11.5,color:"var(--text2)",margin:0}}>{p.audiencia.local}</p>}
+              </div>
+            )}
           </div>
-          {editandoAudiencia ? (
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div><span style={{...lbl,margin:"0 0 3px"}}>Data</span><input type="date" value={audienciaData} onChange={e=>setAudienciaData(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:12}}/></div>
-                <div><span style={{...lbl,margin:"0 0 3px"}}>Hora</span><input type="time" value={audienciaHora} onChange={e=>setAudienciaHora(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:12}}/></div>
-              </div>
-              <div><span style={{...lbl,margin:"0 0 3px"}}>Local</span><input value={audienciaLocal} onChange={e=>setAudienciaLocal(e.target.value)} style={{...inp,padding:"6px 8px",fontSize:12}} placeholder="Ex: Vara, sala, link da videoconferência…"/></div>
-              <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
-                {p.audiencia?.data&&<button onClick={()=>{onSaveAudiencia(p.id,null);setEditandoAudiencia(false);}} style={{...btnSec,fontSize:10.5,padding:"5px 10px",color:"var(--red)"}}>Remover</button>}
-                <button onClick={()=>setEditandoAudiencia(false)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Cancelar</button>
-                <button onClick={()=>{
-                  if(!audienciaData) return;
-                  onSaveAudiencia(p.id, {data:audienciaData, hora:audienciaHora, local:audienciaLocal});
-                  setEditandoAudiencia(false);
-                }} style={{...btnPri,fontSize:10.5,padding:"5px 12px"}}>Salvar</button>
-              </div>
-            </div>
-          ) : p.audiencia?.data ? (
-            <div>
-              <p style={{fontSize:13,fontWeight:700,color:"var(--navy)",margin:"0 0 2px"}}>{fmtData(p.audiencia.data)}{p.audiencia.hora?` às ${p.audiencia.hora}`:""}</p>
-              {p.audiencia.local&&<p style={{fontSize:11.5,color:"var(--text2)",margin:0}}>{p.audiencia.local}</p>}
-            </div>
-          ) : (
-            <p style={{fontSize:11,color:"var(--text3)",margin:0}}>Nenhuma audiência agendada.</p>
-          )}
-        </div>
-
-        {/* Arquivamento */}
-        <div style={{marginTop:14,padding:"10px 12px",background:"var(--bg2)",borderRadius:6,border:"1px solid var(--border1)"}}>
-          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,color:"var(--text1)",cursor:"pointer",marginBottom:p.arquivado?8:0}}>
-            <input type="checkbox" checked={!!p.arquivado} onChange={e=>onToggleArquivado(p.id, e.target.checked)} style={{width:16,height:16}}/>
-            📦 Processo arquivado
-          </label>
-          {p.arquivado&&(
-            <div style={{display:"flex",gap:8,marginTop:6}}>
-              {[["baixado_definitivo","Baixado Definitivo"],["ag_prescricao","Ag. Prescrição"]].map(([v,l])=>(
-                <button key={v} onClick={()=>onToggleArquivado(p.id, true, v)} style={{
-                  flex:1,fontSize:11,padding:"6px 10px",cursor:"pointer",borderRadius:5,fontWeight:600,
-                  border:`1px solid ${p.situacaoArquivo===v?"var(--navy2)":"var(--border2)"}`,
-                  background:p.situacaoArquivo===v?"var(--navy2)":"#fff",
-                  color:p.situacaoArquivo===v?"#fff":"var(--text2)",
-                }}>{l}</button>
-              ))}
-            </div>
-          )}
-        </div>
+        ) : (
+          <div style={{marginTop:14}}>
+            <button onClick={()=>setEditandoAudiencia(true)} style={{...btnSec,fontSize:11,padding:"6px 12px",color:"var(--text2)"}}>⚖️ + Agendar audiência</button>
+          </div>
+        )}
 
         {/* Vínculo com outro processo */}
         <div style={{marginTop:10,padding:"10px 12px",background:"var(--bg2)",borderRadius:6,border:"1px solid var(--border1)"}}>
@@ -1040,11 +1062,9 @@ function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSa
 
         <div style={{borderTop:"1px solid var(--border1)",paddingTop:14,marginTop:16}}>
           <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"1px solid var(--border1)"}}>
-            {["andamentos","tarefas","documentacao","checklist"].map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:tab===t?"2px solid var(--navy2)":"2px solid transparent",color:tab===t?"var(--navy2)":"var(--text2)",padding:"6px 18px 8px",fontSize:12,fontWeight:tab===t?600:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".6px",marginBottom:-1,whiteSpace:"nowrap"}}>{t==="documentacao"?"Documentação":t==="checklist"?"Estratégia":t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
+            {["andamentos","tarefas","documentacao","checklist"].map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:tab===t?"2px solid var(--navy2)":"2px solid transparent",color:tab===t?"var(--navy2)":"var(--text2)",padding:"6px 18px 8px",fontSize:12,fontWeight:tab===t?600:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".6px",marginBottom:-1,whiteSpace:"nowrap"}}>{t==="documentacao"?"Documentação":t==="checklist"?"Obs / Checklist":t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
           </div>
           {tab==="andamentos"&&<div>
-            {ultimaDecisao&&<div style={{marginBottom:10,padding:"8px 12px",background:"var(--amber-bg)",borderRadius:5,borderLeft:"3px solid var(--amber)"}}><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--amber)",margin:"0 0 3px",fontWeight:600}}>Última decisão/despacho</p><p style={{fontSize:12,margin:"0 0 2px",color:"#5C3A0A"}}>{ultimaDecisao.desc}</p><p style={{fontSize:11,color:"var(--amber)",margin:0}}>{fmtData(ultimaDecisao.data)}</p></div>}
-
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               <input value={novoAndDesc} onChange={e=>setNovoAndDesc(e.target.value)} placeholder="Descrever novo andamento…" style={{...inp,flex:1}}/>
               <input type="date" value={novoAndData} onChange={e=>setNovoAndData(e.target.value)} style={{...inp,width:140}}/>
@@ -1108,6 +1128,26 @@ function ModalDetalhe({p,cliente,processos,onClose,onEdit,onChecklistUpdate,onSa
           {tab==="documentacao"&&<ChecklistDocumentacao processo={p} cliente={cliente} onUpdate={onChecklistUpdate} onSaveDriveLink={onSaveDriveLink}/>}
           {tab==="checklist"&&<ChecklistPanel processo={p} onUpdate={onChecklistUpdate}/>}
         </div>
+        {/* Arquivamento — discreto, ao fim */}
+        <div style={{marginTop:18,paddingTop:14,borderTop:"1px solid var(--border1)"}}>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,color:"var(--text2)",cursor:"pointer"}}>
+            <input type="checkbox" checked={!!p.arquivado} onChange={e=>onToggleArquivado(p.id, e.target.checked)} style={{width:15,height:15}}/>
+            Arquivar este processo
+          </label>
+          {p.arquivado&&(
+            <div style={{display:"flex",gap:8,marginTop:8}}>
+              {[["baixado_definitivo","Baixado Definitivo"],["ag_prescricao","Ag. Prescrição"]].map(([v,l])=>(
+                <button key={v} onClick={()=>onToggleArquivado(p.id, true, v)} style={{
+                  fontSize:10.5,padding:"5px 12px",cursor:"pointer",borderRadius:5,fontWeight:600,
+                  border:`1px solid ${p.situacaoArquivo===v?"var(--navy2)":"var(--border2)"}`,
+                  background:p.situacaoArquivo===v?"var(--navy2)":"#fff",
+                  color:p.situacaoArquivo===v?"#fff":"var(--text2)",
+                }}>{l}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
           {onExcluir&&<button onClick={()=>{onExcluir(p.id);onClose();}} style={{...btnSec,color:"var(--red)",borderColor:"#F3B8B8",marginRight:"auto"}}>🗑 Excluir processo</button>}
           <button onClick={()=>onSavePrazo(p)} style={{...btnSec,display:"flex",alignItems:"center",gap:6}}>⏱ Analisar prazo</button>
@@ -1265,7 +1305,13 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
               )}
             </div>
             <div><span style={lbl}>Status</span><select value={normalizarStatus(f.status)} onChange={e=>s("status",e.target.value)} style={{...inp,padding:"7px 8px"}}>{STATUS_VALIDOS.map(k=><option key={k} value={k}>{SC[k].label}</option>)}</select></div>
-            <div><span style={lbl}>Prazo</span><input type="date" value={f.prazo} onChange={e=>s("prazo",e.target.value)} style={{...inp,padding:"7px 8px"}}/></div>
+            <div>
+              <span style={lbl}>Prazo <span style={{color:"var(--text3)",fontWeight:400,textTransform:"none",letterSpacing:0}}>(opcional)</span></span>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input type="date" value={f.prazo||""} onChange={e=>s("prazo",e.target.value)} style={{...inp,padding:"7px 8px",flex:1}}/>
+                {f.prazo&&<button type="button" onClick={()=>s("prazo","")} title="Remover prazo" style={{fontSize:11,padding:"7px 10px",cursor:"pointer",borderRadius:5,border:"1px solid var(--border2)",background:"#fff",color:"var(--text2)",whiteSpace:"nowrap"}}>Sem prazo</button>}
+              </div>
+            </div>
           </div>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -1477,19 +1523,19 @@ const CLIENTES0=[
 ];
 
 const PROCS0=[
-  {id:1,clienteId:1,numero:"0116394-14.2016.4.02.5117",sistema:"eProc",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Caixa Econômica Federal",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Caixa Econômica Federal",polo:"reu",clienteId:null}],vara:"2ª Vara Federal de São Gonçalo",responsavel:"",status:"encerrado",prazo:"2026-02-25",debito:{valor:209978.38,dataAtualizacao:"2026-01-10"},andamentos:[{data:"2018-12-18",desc:"Processo suspenso"},{data:"2025-08-16",desc:"Levantada a suspensão do processo"},{data:"2026-02-25",desc:"Sentença — extinção por prescrição intercorrente"}],documentos:[],checklist:{},obs:""},
-  {id:2,clienteId:1,numero:"0000452-60.2018.4.02.5117",sistema:"eProc",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Caixa Econômica Federal",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Caixa Econômica Federal",polo:"reu",clienteId:null}],vara:"2ª Vara Federal de São Gonçalo",responsavel:"",status:"aguardando",prazo:"2026-06-08",debito:{valor:156824.12,dataAtualizacao:"2025-12-01"},andamentos:[{data:"2020-01-28",desc:"Processo suspenso"},{data:"2025-08-16",desc:"Levantada a suspensão do processo"},{data:"2026-04-08",desc:"Aguardando manifestação da CEF"}],documentos:[],checklist:{},obs:""},
-  {id:3,clienteId:1,numero:"0014432-91.2016.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Bradesco",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Bradesco",polo:"reu",clienteId:null}],vara:"1ª Vara Cível de Itaboraí",responsavel:"",status:"aguardando",prazo:"2026-11-01",debito:null,andamentos:[{data:"2024-11-14",desc:"Processo suspenso"},{data:"2025-02-13",desc:"Encaminhado ao arquivo"}],documentos:[],checklist:{},obs:""},
-  {id:4,clienteId:1,numero:"0014614-77.2016.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Banco do Brasil",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"reu",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:474798.12,dataAtualizacao:"2026-01-15"},andamentos:[{data:"2021-11-12",desc:"Início da execução"},{data:"2023-10-03",desc:"Penhora Bacen — R$452 CEF Soraia — não intimada pessoalmente"},{data:"2025-01-01",desc:"Penhora dos veículos — Fiat Uno e Fiorino"}],documentos:[],checklist:{},obs:""},
-  {id:5,clienteId:1,numero:"0014612-10.2016.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Banco do Brasil",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"reu",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:230206.00,dataAtualizacao:"2025-11-20"},andamentos:[{data:"2021-02-01",desc:"Citação por edital"},{data:"2025-05-19",desc:"Citação válida — possível prescrição"}],documentos:[],checklist:{},obs:""},
+  {id:1,clienteId:1,numero:"0116394-14.2016.4.02.5117",sistema:"eProc",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Caixa Econômica Federal",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Caixa Econômica Federal",polo:"autor",clienteId:null}],vara:"2ª Vara Federal de São Gonçalo",responsavel:"",status:"encerrado",prazo:"2026-02-25",debito:{valor:209978.38,dataAtualizacao:"2026-01-10"},andamentos:[{data:"2018-12-18",desc:"Processo suspenso"},{data:"2025-08-16",desc:"Levantada a suspensão do processo"},{data:"2026-02-25",desc:"Sentença — extinção por prescrição intercorrente"}],documentos:[],checklist:{},obs:""},
+  {id:2,clienteId:1,numero:"0000452-60.2018.4.02.5117",sistema:"eProc",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Caixa Econômica Federal",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Caixa Econômica Federal",polo:"autor",clienteId:null}],vara:"2ª Vara Federal de São Gonçalo",responsavel:"",status:"aguardando",prazo:"2026-06-08",debito:{valor:156824.12,dataAtualizacao:"2025-12-01"},andamentos:[{data:"2020-01-28",desc:"Processo suspenso"},{data:"2025-08-16",desc:"Levantada a suspensão do processo"},{data:"2026-04-08",desc:"Aguardando manifestação da CEF"}],documentos:[],checklist:{},obs:""},
+  {id:3,clienteId:1,numero:"0014432-91.2016.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Bradesco",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Bradesco",polo:"autor",clienteId:null}],vara:"1ª Vara Cível de Itaboraí",responsavel:"",status:"aguardando",prazo:"2026-11-01",debito:null,andamentos:[{data:"2024-11-14",desc:"Processo suspenso"},{data:"2025-02-13",desc:"Encaminhado ao arquivo"}],documentos:[],checklist:{},obs:""},
+  {id:4,clienteId:1,numero:"0014614-77.2016.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Banco do Brasil",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"autor",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:474798.12,dataAtualizacao:"2026-01-15"},andamentos:[{data:"2021-11-12",desc:"Início da execução"},{data:"2023-10-03",desc:"Penhora Bacen — R$452 CEF Soraia — não intimada pessoalmente"},{data:"2025-01-01",desc:"Penhora dos veículos — Fiat Uno e Fiorino"}],documentos:[],checklist:{},obs:""},
+  {id:5,clienteId:1,numero:"0014612-10.2016.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Banco do Brasil",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"autor",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:230206.00,dataAtualizacao:"2025-11-20"},andamentos:[{data:"2021-02-01",desc:"Citação por edital"},{data:"2025-05-19",desc:"Citação válida — possível prescrição"}],documentos:[],checklist:{},obs:""},
   {id:6,clienteId:2,numero:"0013576-30.2016.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi",reu:"Musical Express",vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"aguardando",prazo:"2026-03-23",debito:{valor:21658.62,dataAtualizacao:"2026-02-01"},andamentos:[{data:"2026-03-23",desc:"Requerida expedição de ofícios aos cartórios"}],documentos:[],checklist:{},obs:""},
-  {id:7,clienteId:1,numero:"0006224-84.2017.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Banco do Brasil",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"reu",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:162772.38,dataAtualizacao:"2025-10-05"},andamentos:[{data:"2025-09-12",desc:"Sentença de procedência"},{data:"2025-11-24",desc:"Requerida expedição de ofícios"}],documentos:[],checklist:{},obs:""},
-  {id:8,clienteId:1,numero:"0162246-28.2015.4.02.5107",sistema:"eProc",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Caixa Econômica Federal",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Caixa Econômica Federal",polo:"reu",clienteId:null}],vara:"2ª Vara Federal de Itaboraí",responsavel:"",status:"aguardando",prazo:"2026-06-08",debito:{valor:717990.99,dataAtualizacao:"2026-01-08"},andamentos:[{data:"2025-12-11",desc:"Prescrição intercorrente consumada"}],documentos:[],checklist:{},obs:""},
-  {id:9,clienteId:1,numero:"0025428-87.2015.8.19.0087",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Bradesco",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Bradesco",polo:"reu",clienteId:null}],vara:"1ª Vara Cível de Alcântara",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:null,andamentos:[{data:"2025-02-05",desc:"Certificado — autos paralisados desde agosto de 2024"}],documentos:[],checklist:{},obs:""},
-  {id:10,clienteId:1,numero:"0343485-47.2015.8.19.0001",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Banco do Brasil",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"reu",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:534822.60,dataAtualizacao:"2025-12-20"},andamentos:[{data:"2022-05-15",desc:"Início da execução"},{data:"2025-11-25",desc:"Certificado recolhimento de custas para expedição de mandado"}],documentos:[],checklist:{},obs:""},
-  {id:11,clienteId:1,numero:"0000882-52.2017.8.19.0004",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Bradesco",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Bradesco",polo:"reu",clienteId:null}],vara:"2ª Vara Cível Regional de Alcântara",responsavel:"",status:"ativo",prazo:"2026-07-14",debito:{valor:38684.46,dataAtualizacao:"2025-09-01"},andamentos:[{data:"2025-06-26",desc:"Banco requereu Bacen Jud — NÃO PODE HAVER PENHORA"},{data:"2025-09-25",desc:"Determinado recolhimento de custas — intimação das partes"}],documentos:[],checklist:{},obs:"Prescrição em 14/07/2026."},
+  {id:7,clienteId:1,numero:"0006224-84.2017.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Banco do Brasil",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"autor",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:162772.38,dataAtualizacao:"2025-10-05"},andamentos:[{data:"2025-09-12",desc:"Sentença de procedência"},{data:"2025-11-24",desc:"Requerida expedição de ofícios"}],documentos:[],checklist:{},obs:""},
+  {id:8,clienteId:1,numero:"0162246-28.2015.4.02.5107",sistema:"eProc",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Caixa Econômica Federal",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Caixa Econômica Federal",polo:"autor",clienteId:null}],vara:"2ª Vara Federal de Itaboraí",responsavel:"",status:"aguardando",prazo:"2026-06-08",debito:{valor:717990.99,dataAtualizacao:"2026-01-08"},andamentos:[{data:"2025-12-11",desc:"Prescrição intercorrente consumada"}],documentos:[],checklist:{},obs:""},
+  {id:9,clienteId:1,numero:"0025428-87.2015.8.19.0087",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Bradesco",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Bradesco",polo:"autor",clienteId:null}],vara:"1ª Vara Cível de Alcântara",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:null,andamentos:[{data:"2025-02-05",desc:"Certificado — autos paralisados desde agosto de 2024"}],documentos:[],checklist:{},obs:""},
+  {id:10,clienteId:1,numero:"0343485-47.2015.8.19.0001",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Banco do Brasil",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"autor",clienteId:null}],vara:"2ª Vara Cível de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:534822.60,dataAtualizacao:"2025-12-20"},andamentos:[{data:"2022-05-15",desc:"Início da execução"},{data:"2025-11-25",desc:"Certificado recolhimento de custas para expedição de mandado"}],documentos:[],checklist:{},obs:""},
+  {id:11,clienteId:1,numero:"0000882-52.2017.8.19.0004",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Bradesco",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Bradesco",polo:"autor",clienteId:null}],vara:"2ª Vara Cível Regional de Alcântara",responsavel:"",status:"ativo",prazo:"2026-07-14",debito:{valor:38684.46,dataAtualizacao:"2025-09-01"},andamentos:[{data:"2025-06-26",desc:"Banco requereu Bacen Jud — NÃO PODE HAVER PENHORA"},{data:"2025-09-25",desc:"Determinado recolhimento de custas — intimação das partes"}],documentos:[],checklist:{},obs:"Prescrição em 14/07/2026."},
   {id:12,clienteId:3,numero:"0005275-62.2017.8.19.0087",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Eletrônica Ehime",reu:"Banco Itaú / Banco Iresolve",vara:"3ª Vara Cível Regional de Alcântara",responsavel:"",status:"aguardando",prazo:"2026-06-08",debito:{valor:70998.22,dataAtualizacao:"2025-06-15"},andamentos:[{data:"2022-02-06",desc:"Suspensa a execução"}],documentos:[],checklist:{},obs:""},
-  {id:13,clienteId:1,numero:"0000125-59.2021.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",reu:"Banco do Brasil",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"autor",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"autor",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"reu",clienteId:null}],vara:"1ª Vara Cível Regional de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:111000.00,dataAtualizacao:"2025-08-10"},andamentos:[{data:"2023-01-13",desc:"Citação"}],documentos:[],checklist:{},obs:""},
+  {id:13,clienteId:1,numero:"0000125-59.2021.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Banco do Brasil",reu:"Tony Edson Takariro Uesugi e Soraia Souza Uesugi",partes:[{id:"p-tony",nome:"Tony Edson Takariro Uesugi",polo:"reu",clienteId:1},{id:"p-soraia",nome:"Soraia Souza Uesugi",polo:"reu",clienteId:7},{id:"p-reu",nome:"Banco do Brasil",polo:"autor",clienteId:null}],vara:"1ª Vara Cível Regional de Itaboraí",responsavel:"",status:"ativo",prazo:"2026-06-08",debito:{valor:111000.00,dataAtualizacao:"2025-08-10"},andamentos:[{data:"2023-01-13",desc:"Citação"}],documentos:[],checklist:{},obs:""},
   {id:9101,clienteId:9001,numero:"0007430-36.2017.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"inventario",autor:"Espólio de Álvaro Augusto Lopes",reu:"—",vara:"Itaboraí",responsavel:"",status:"ativo",prazo:"",debito:null,andamentos:[{data:"2017-10-17",desc:"Sentença homologatória da partilha."},{data:"2017-10-17",desc:"Sentença posterior que extinguia o processo foi anulada, mantendo a partilha válida. Inventário da meeira ainda necessário."}],documentos:[],checklist:{},obs:"Inventário — Espólio de Álvaro Augusto Lopes. Data da partilha: 17/10/2017."},
   {id:9102,clienteId:9001,numero:"0005548-05.2018.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"JB e RMR",reu:"Herdeiras",vara:"Itaboraí",responsavel:"",status:"ativo",prazo:"",debito:null,andamentos:[{data:"2017-10-17",desc:"Distribuição do processo."},{data:"2017-10-17",desc:"Sentença homologatória da partilha; sentença posterior de extinção foi anulada, mantendo a partilha."},{data:"2026-03-01",desc:"TJ/RJ, em apelação no inventário, reconheceu a validade da sentença homologatória e a possibilidade de o credor buscar satisfação diretamente com os herdeiros (art. 1.997 CC). Juíza reconheceu que a ação deveria ter sido ajuizada diretamente contra as herdeiras (art. 1.997 CC e 796 CPC). Redirecionamento da execução determinado; aguarda citação. Embargos à execução apresentados em nome das herdeiras."}],documentos:[],checklist:{},obs:"JB e RMR x Herdeiras. JB e RMR constituídas em decorrência da cisão da Alcântara em 30/08/2012. Intimada da penhora — citação inválida, com prova documental de mudança de endereço. Embargos em nome de uma das herdeiras."},
   {id:9103,clienteId:9001,numero:"3001556-04.2026.8.19.0023",sistema:"PJe",tipo:"judicial",classificacao:"execucao_extrajudicial",autor:"Alba Valeria Lopes; Patricia Maria Lopes",reu:"RMR Comércio, Importação e Aluguel Ltda.",vara:"Comarca de Itaboraí — Embargos à Execução (ITB02VCIV1J)",responsavel:"",status:"em_andamento",prazo:"",debito:null,assunto:"Efeito Suspensivo / Impugnação / Embargos à Execução — Inexequibilidade do Título",valorCausa:"588095.37",andamentos:[{data:"2026-01-01",desc:"Distribuídos os Embargos à Execução — requerida a gratuidade de justiça."},{data:"2026-04-18",desc:"Distribuição do processo (data oficial confirmada)."},{data:"2026-05-13",desc:"Proferido despacho de mero expediente."}],documentos:[],checklist:{},obs:"Embargos à Execução — Herdeiras (Alba Valeria Lopes e Patricia Maria Lopes) x JB e RMR. Processo derivado do redirecionamento de execução do caso 0005548-05.2018.8.19.0023. Dados confirmados via relatório de processos de 20/06/2026."},
@@ -2739,16 +2785,14 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
                 <div style={{minWidth:0}}>
                   {(()=>{
                     const {nomeCliente, adversa} = clientePrincipalEAdversa(p, clientes);
-                    const multi = nomesPorPolo(p,"autor").length>1 || nomesPorPolo(p,"reu").length>1;
                     return (
                       <p style={{fontSize:13.5,fontWeight:600,color:"var(--text1)",margin:"0 0 3px",lineHeight:1.35}}>
                         {nomeCliente} <span style={{color:"var(--text3)",fontWeight:400}}>×</span> {adversa}
-                        {multi&&<span style={{fontSize:10,color:"var(--text3)",fontWeight:400}}> +litisc.</span>}
                       </p>
                     );
                   })()}
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                    <span style={{fontSize:11,fontFamily:"monospace",color:"var(--text2)"}}>{p.numero}</span>
+                    <span style={{fontSize:12.5,fontWeight:500,color:"var(--text2)",letterSpacing:".2px"}}>{p.numero}</span>
                     {p.sistema&&<span style={{fontSize:9,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".3px"}}>{p.sistema}</span>}
                     {p.arquivado&&<span style={{fontSize:9,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".3px"}}>· Arquivado</span>}
                   </div>
@@ -2811,7 +2855,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       </div>
       <p style={{fontSize:11,color:"var(--text2)",marginTop:8,textAlign:"right"}}>{lista.length} registro(s)</p>
       {acaoLote&&<ModalAcaoLote tipo={acaoLote} qtd={selecionados.size} clientes={clientes} classificacoes={[...CLASSIFICACOES_VALIDAS,...(classificacoesCustom||[])]} onAplicar={aplicarLote} onClose={()=>setAcaoLote(null)}/>}
-      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddTarefaProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} tarefasDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirTarefaProc={concluirTarefaProc} onArquivarTarefaProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia} onExcluir={excluirProcesso}/>}
+      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddTarefaProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} tarefasDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirTarefaProc={concluirTarefaProc} onArquivarTarefaProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia} onExcluir={excluirProcesso} onSaveCampo={(id,campo,valor)=>setProcessos(ps=>ps.map(x=>x.id===id?{...x,[campo]:valor}:x))}/>}
       {(editando||novo)&&<ModalFormProc processo={editando} clientes={clientes} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}} onNovoCliente={onNovoCliente} classificacoesCustom={classificacoesCustom||[]} onNovaClassificacao={nova=>{ if(setClassificacoesCustom) setClassificacoesCustom(cs=>cs.includes(nova)?cs:[...cs,nova]); }}/>}
       {mapaProc&&<ModalMapa proc={mapaProc} mapaData={mapas[mapaProc.id]||defaultMap()} onChange={data=>setMapas(m=>({...m,[mapaProc.id]:data}))} onClose={()=>setMapaProc(null)}/>}
       {analisandoPrazo&&<ModalConfirmarPrazo proc={analisandoPrazo} sugestao={sugestaoPrazo} dataAndamento={[...(analisandoPrazo.andamentos||[])].sort((a,b)=>b.data.localeCompare(a.data))[0]?.data||""} onConfirm={salvarPrazo} onClose={()=>{setAnalisandoPrazo(null);setSugestaoPrazo(null);}}/>}
@@ -2841,6 +2885,7 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
   const [editando,setEditando]=useState(null);
   const [novo,setNovo]=useState(false);
   const [selecionado,setSelecionado]=useState(null);
+  const [qualifCopiada,setQualifCopiada]=useState(null);
 
   React.useEffect(()=>{
     if(clienteParaAbrir){ setNovo(true); onClienteAberto(); }
@@ -2856,6 +2901,31 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
   const salvar = form => {
     setClientes(cs=>form.id?cs.map(c=>c.id===form.id?form:c):[...cs,{...form,id:Date.now()}]);
     setEditando(null);setNovo(false);
+  };
+
+  // Monta a qualificação formal da parte para uso em petições
+  const montarQualificacao = (c) => {
+    const partes = [];
+    partes.push(c.nome ? c.nome.toUpperCase() : "[NOME]");
+    if(c.nacionalidade) partes.push(c.nacionalidade.toLowerCase());
+    if(c.estadoCivil) partes.push(c.estadoCivil.toLowerCase());
+    if(c.profissao) partes.push(c.profissao.toLowerCase());
+    let texto = partes.join(", ");
+    const docs = [];
+    if(c.rg) docs.push(`portador(a) da cédula de identidade RG nº ${c.rg}`);
+    if(c.cpf) docs.push(`inscrito(a) no CPF sob o nº ${c.cpf}`);
+    if(docs.length) texto += ", " + docs.join(", ");
+    if(c.endereco) texto += `, residente e domiciliado(a) em ${c.endereco}`;
+    if(c.email) texto += `, e-mail: ${c.email}`;
+    texto += ".";
+    return texto;
+  };
+
+  const copiarQualificacao = (c) => {
+    const txt = montarQualificacao(c);
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(()=>{setQualifCopiada(c.id);setTimeout(()=>setQualifCopiada(null), 2500);}).catch(()=>{});
+    }
   };
 
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
@@ -2938,6 +3008,16 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
                 {procsDe(selecionado.id).length===0&&<p style={{fontSize:12,color:"var(--text2)"}}>Nenhum processo vinculado a este cliente ainda.</p>}
               </div>
             </div>
+            {/* Qualificação para petição */}
+            <div style={{marginTop:16,borderTop:"1px solid var(--border1)",paddingTop:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",color:"var(--text2)",margin:0}}>Qualificação para petição</p>
+                <button onClick={()=>copiarQualificacao(selecionado)} style={{...btnSec,fontSize:10.5,padding:"5px 11px",color:qualifCopiada===selecionado.id?"var(--green)":"var(--accent)",borderColor:qualifCopiada===selecionado.id?"#A8DDB8":"var(--border2)"}}>{qualifCopiada===selecionado.id?"✓ Copiado!":"📋 Copiar qualificação"}</button>
+              </div>
+              <div style={{background:"var(--bg2)",borderRadius:6,padding:"10px 12px",fontSize:12,color:"var(--text1)",lineHeight:1.6,fontStyle:"italic"}}>{montarQualificacao(selecionado)}</div>
+              <p style={{fontSize:10,color:"var(--text3)",margin:"6px 0 0"}}>Dados faltantes (RG, estado civil, profissão, etc.) podem ser preenchidos em "Editar cliente".</p>
+            </div>
+
             <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end"}}>
               <button onClick={()=>{setEditando(selecionado);setSelecionado(null);}} style={btnSec}>Editar cliente</button>
               <button onClick={()=>setSelecionado(null)} style={btnPri}>Fechar</button>
