@@ -5652,6 +5652,8 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const [erroSalvar,setErroSalvar]=useState("");
   const tryParse = (val, fallback) => { try { return val ? (typeof val==="string" ? JSON.parse(val) : val) : fallback; } catch(_){ return fallback; } };
   const prevIds = React.useRef({}); // snapshot dos IDs conhecidos de cada tabela (para exclusão segura)
+  const carregandoRef = React.useRef(true); // sempre reflete o valor atual de carregandoDados
+  React.useEffect(()=>{ carregandoRef.current = carregandoDados; },[carregandoDados]);
 
   // ── Carregar dados do Supabase na inicialização ──────────
   React.useEffect(()=>{
@@ -5751,10 +5753,10 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   };
   const JSON_FIELDS = ["andamentos","partes","checklist","exitos","debito","documentos","audiencia","vinculo"];
   const autoSave = React.useCallback((tabela, dados, delay=1200) => {
-    if(carregandoDados) return;
+    if(carregandoRef.current) return;
     if(!Array.isArray(dados)) return;
     clearTimeout(saveTimer.current[tabela]);
-    setSincStatus("salvando");
+    Promise.resolve().then(()=>setSincStatus("salvando"));
     saveTimer.current[tabela] = setTimeout(async()=>{
       try {
         const cols = COLUNAS[tabela];
@@ -5788,7 +5790,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
         setTimeout(()=>setSincStatus(""),2500);
       } catch(e){ setSincStatus("erro"); setErroSalvar(`Falha ao salvar em "${tabela}": ${e.message||e.code||"erro desconhecido"}`); console.error("Erro ao salvar:", tabela, e); }
     }, delay);
-  },[uid, carregandoDados]);
+  },[uid]);
 
   // Wraps de setXxx que disparam auto-save
   const setProcessosSaved = React.useCallback(v=>{ setProcessos(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("processos",n); return n; }); },[autoSave]);
