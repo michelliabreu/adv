@@ -5680,6 +5680,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const tryParse = (val, fallback) => { try { return val ? (typeof val==="string" ? JSON.parse(val) : val) : fallback; } catch(_){ return fallback; } };
   const prevIds = React.useRef({}); // snapshot dos IDs conhecidos de cada tabela (para exclusão segura)
   const carregandoRef = React.useRef(true); // sempre reflete o valor atual de carregandoDados
+  const alertouErro = React.useRef(false); // garante que o alerta de erro apareça só uma vez
   React.useEffect(()=>{ carregandoRef.current = carregandoDados; },[carregandoDados]);
 
   // ── Carregar dados do Supabase na inicialização ──────────
@@ -5822,8 +5823,14 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
         if(e.code) partes.push(`código ${e.code}`);
         if(e.details) partes.push(e.details);
         if(e.hint) partes.push("Dica: "+e.hint);
-        setErroSalvar(`Falha ao salvar em "${tabela}": ${partes.join(" — ")||"erro desconhecido"}`);
+        const msg = `Falha ao salvar em "${tabela}": ${partes.join(" — ")||"erro desconhecido"}`;
+        setErroSalvar(msg);
         console.error("Erro ao salvar:", tabela, JSON.stringify(e));
+        // Mostra o erro completo numa janela na primeira falha, para diagnóstico
+        if(!alertouErro.current){
+          alertouErro.current = true;
+          alert("ERRO DE SALVAMENTO (copie este texto e envie):\n\n"+msg+"\n\nuser_id atual: "+(uid||"(vazio!)"));
+        }
       }
     }, delay);
   },[uid]);
