@@ -1266,15 +1266,24 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
         <p style={{fontSize:15,fontWeight:700,margin:"0 0 18px",color:"var(--navy)"}}>{processo?"Editar processo":"Novo processo"}</p>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div>
-            <span style={lbl}>Cliente vinculado (CRM)</span>
-            <div style={{display:"flex",gap:8}}>
-              <select value={f.clienteId||""} onChange={e=>onSelectCliente(e.target.value)} style={{...inp,padding:"8px 8px"}}>
-                <option value="">Selecione um cliente cadastrado…</option>
-                {[...clientes].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map(c=><option key={c.id} value={c.id}>{c.nome}{c.cpf?` — ${c.cpf}`:""}</option>)}
-              </select>
-              <button type="button" onClick={onNovoCliente} style={{...btnSec,whiteSpace:"nowrap",fontSize:11,padding:"8px 12px"}}>+ Cliente</button>
-            </div>
-            {!f.clienteId&&!modoMultiplo&&<p style={{fontSize:10.5,color:"var(--amber)",margin:"5px 0 0"}}>⚠ Vincule um cliente para habilitar e-mail e relatórios automáticos.</p>}
+            <span style={lbl}>Cliente</span>
+            <input
+              list="lista-clientes-proc"
+              value={f.clienteNome!==undefined ? f.clienteNome : (f.clienteId ? (clientes.find(c=>c.id===f.clienteId)?.nome||"") : "")}
+              onChange={e=>{
+                const txt = e.target.value;
+                const achado = clientes.find(c=>c.nome.toLowerCase()===txt.toLowerCase().trim());
+                setF(x=>({...x, clienteNome:txt, clienteId: achado?achado.id:""}));
+              }}
+              placeholder="Digite o nome do cliente…"
+              style={inp}
+            />
+            <datalist id="lista-clientes-proc">
+              {[...clientes].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map(c=><option key={c.id} value={c.nome}>{c.cpf?c.cpf:""}</option>)}
+            </datalist>
+            {f.clienteNome && !f.clienteId && f.clienteNome.trim() && (
+              <p style={{fontSize:10.5,color:"var(--accent)",margin:"5px 0 0"}}>✨ "{f.clienteNome.trim()}" será cadastrado como novo cliente ao salvar.</p>
+            )}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
             <div><span style={lbl}>Número do processo</span><input value={f.numero||""} onChange={e=>{
@@ -2689,7 +2698,25 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       return true;
     });
   },[processos,aba,busca,filtroCliente,filtroAno,filtroClassificacao,filtroSistema,filtroVara,filtroResponsavel]);
-  const salvar=form=>{setProcessos(ps=>form.id?ps.map(p=>p.id===form.id?form:p):[...ps,{...form,id:Date.now(),andamentos:[],documentos:[]}]);setEditando(null);setNovo(false);};
+  const salvar=form=>{
+    let dados = {...form};
+    // Se digitou um nome de cliente que não existe, cria o cliente automaticamente (só com o nome)
+    const nomeDigitado = (form.clienteNome||"").trim();
+    if(nomeDigitado && !form.clienteId){
+      const existente = clientes.find(c=>c.nome.toLowerCase()===nomeDigitado.toLowerCase());
+      if(existente){
+        dados.clienteId = existente.id;
+      } else {
+        const novoId = Date.now() + Math.floor(Math.random()*1000);
+        const novoCliente = {id:novoId, nome:nomeDigitado, cpf:"", rg:"", profissao:"", estadoCivil:"", nacionalidade:"", telefone:"", email:"", endereco:"", obs:""};
+        setClientes(cs=>[...cs, novoCliente]);
+        dados.clienteId = novoId;
+      }
+    }
+    delete dados.clienteNome; // campo auxiliar, não vai para o banco
+    setProcessos(ps=>dados.id?ps.map(p=>p.id===dados.id?dados:p):[...ps,{...dados,id:Date.now(),andamentos:[],documentos:[]}]);
+    setEditando(null);setNovo(false);
+  };
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
   const btnLote={fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:5,border:"none",background:"rgba(255,255,255,.15)",color:"#fff",cursor:"pointer",whiteSpace:"nowrap"};
   const btnIcon={fontSize:13,width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",borderRadius:6,border:"1px solid var(--border1)",background:"#fff",padding:0,lineHeight:1};
