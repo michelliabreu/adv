@@ -5788,7 +5788,16 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
         setSincStatus("salvo");
         setErroSalvar("");
         setTimeout(()=>setSincStatus(""),2500);
-      } catch(e){ setSincStatus("erro"); setErroSalvar(`Falha ao salvar em "${tabela}": ${e.message||e.code||"erro desconhecido"}`); console.error("Erro ao salvar:", tabela, e); }
+      } catch(e){
+        setSincStatus("erro");
+        const partes = [];
+        if(e.message) partes.push(e.message);
+        if(e.code) partes.push(`código ${e.code}`);
+        if(e.details) partes.push(e.details);
+        if(e.hint) partes.push("Dica: "+e.hint);
+        setErroSalvar(`Falha ao salvar em "${tabela}": ${partes.join(" — ")||"erro desconhecido"}`);
+        console.error("Erro ao salvar:", tabela, JSON.stringify(e));
+      }
     }, delay);
   },[uid]);
 
@@ -5909,6 +5918,22 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
             </span>
             <button onClick={async()=>{ if(confirm("Sair da conta?")) await sb.auth.signOut(); }} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid rgba(255,255,255,.2)",background:"none",color:"rgba(255,255,255,.5)",fontWeight:500}}>Sair</button>
           </div>
+          <button onClick={async()=>{
+            try {
+              const { data:{session} } = await sb.auth.getSession();
+              if(!session){ alert("DIAGNÓSTICO:\n\n❌ Você não está autenticado (sem sessão). O banco recusa salvar sem login válido. Saia e entre de novo."); return; }
+              const meuId = session.user.id;
+              // tenta gravar e ler de volta uma config simples
+              const teste = { user_id: meuId, tipos_extra: JSON.stringify(["__teste__"]) };
+              const { error: errUp } = await sb.from("configuracoes").upsert(teste, {onConflict:"user_id"});
+              if(errUp){ alert("DIAGNÓSTICO:\n\n❌ Erro ao SALVAR no banco:\n\n"+(errUp.message||"")+"\n\nCódigo: "+(errUp.code||"?")+"\nDetalhe: "+(errUp.details||"-")+"\nDica: "+(errUp.hint||"-")+"\n\nMe envie este texto."); return; }
+              const { data, error: errSel } = await sb.from("processos").select("id,user_id").limit(3);
+              if(errSel){ alert("DIAGNÓSTICO:\n\n⚠ Salvou config, mas erro ao LER processos:\n\n"+errSel.message); return; }
+              const meus = (data||[]).filter(r=>r.user_id===meuId).length;
+              const outros = (data||[]).filter(r=>r.user_id!==meuId).length;
+              alert("DIAGNÓSTICO:\n\n✅ Salvamento no banco FUNCIONA (gravou e leu com sucesso).\n\nSeu ID de usuário: "+meuId+"\n\nProcessos visíveis (amostra de 3): "+(data||[]).length+"\n- Com SEU user_id: "+meus+"\n- Com user_id DIFERENTE: "+outros+"\n\nSe há processos com user_id diferente, eles não podem ser editados/excluídos por você (regra de segurança). Me envie este texto.");
+            } catch(e){ alert("DIAGNÓSTICO:\n\n❌ Exceção: "+(e.message||e)); }
+          }} style={{width:"100%",marginTop:10,fontSize:10,padding:"6px 9px",cursor:"pointer",borderRadius:4,border:"1px solid rgba(255,255,255,.2)",background:"rgba(255,255,255,.06)",color:"rgba(255,255,255,.6)",fontWeight:500}}>🔧 Testar salvamento</button>
         </div>
       </div>
 
