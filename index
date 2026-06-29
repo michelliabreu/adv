@@ -5681,6 +5681,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const prevIds = React.useRef({}); // snapshot dos IDs conhecidos de cada tabela (para exclusão segura)
   const carregandoRef = React.useRef(true); // sempre reflete o valor atual de carregandoDados
   const alertouErro = React.useRef(false); // garante que o alerta de erro apareça só uma vez
+  const snapshots = React.useRef({}); // assinatura do último estado salvo de cada registro (salva só o que mudou)
   React.useEffect(()=>{ carregandoRef.current = carregandoDados; },[carregandoDados]);
 
   // ── Carregar dados do Supabase na inicialização ──────────
@@ -5788,18 +5789,41 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
     saveTimer.current[tabela] = setTimeout(async()=>{
       try {
         const cols = COLUNAS[tabela];
-        // Salva (insere ou atualiza) todos os itens atuais
-        if(dados.length>0){
-          const comUser = dados.map(d=>{
-            const obj = { user_id: uid };
-            (cols||Object.keys(d)).forEach(c=>{
-              if(d[c]===undefined) return;
-              obj[c] = JSON_FIELDS.includes(c) ? JSON.stringify(d[c]) : d[c];
-            });
-            return obj;
+        const prepararRegistro = (d) => {
+          const obj = { user_id: uid };
+          (cols||Object.keys(d)).forEach(c=>{
+            if(d[c]===undefined) return;
+            obj[c] = JSON_FIELDS.includes(c) ? JSON.stringify(d[c]) : d[c];
           });
-          const { error } = await sb.from(tabela).upsert(comUser, {onConflict:"id"});
-          if(error) throw error;
+          return obj;
+        };
+
+        // Salva só os registros que MUDARAM desde o último salvamento (comparação por snapshot).
+        if(dados.length>0){
+          const snap = snapshots.current[tabela] || {};
+          const alterados = dados.filter(d=>{
+            if(!d.id) return false;
+            const assinatura = JSON.stringify(prepararRegistro(d));
+            return snap[d.id] !== assinatura;
+          });
+
+          if(alterados.length>0){
+            // Salva um por um, isolando qualquer registro problemático
+            const novoSnap = {...snap};
+            let primeiroErro = null;
+            for(const d of alterados){
+              const registro = prepararRegistro(d);
+              const { error } = await sb.from(tabela).upsert(registro, {onConflict:"id"});
+              if(error){
+                if(!primeiroErro) primeiroErro = {error, id:d.id};
+                console.error(`Erro ao salvar ${tabela} id=${d.id}:`, error.message);
+              } else {
+                novoSnap[d.id] = JSON.stringify(registro); // só marca como salvo se deu certo
+              }
+            }
+            snapshots.current[tabela] = novoSnap;
+            if(primeiroErro) throw primeiroErro.error;
+          }
         }
 
         // Exclusão SEGURA: só remove do banco itens removidos pelo usuário (remoção parcial).
