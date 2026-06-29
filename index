@@ -853,7 +853,9 @@ function ChecklistPanel({processo,onUpdate}){
   );
 }
 // ── Modal Detalhe Processo ────────────────────────────────
-function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir,onSaveCampo,onSavePrazoComTarefa}){
+function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir,onSaveCampo,onSavePrazoComTarefa}){
+  // Sempre usa a versão mais atual do processo (da lista), para refletir edições na hora
+  const p = (processos||[]).find(x=>x.id===pProp.id) || pProp;
   const [tab,setTab]=useState("andamentos");
   const [editandoDebito,setEditandoDebito]=useState(false);
   const [novoAndDesc,setNovoAndDesc]=useState("");
@@ -2523,20 +2525,28 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     }]);
   };
 
-  // Salva o prazo do processo E cria uma tarefa pendente correspondente
+  // Identifica a tarefa de prazo de um processo (gerada automaticamente).
+  // Usa o título padrão para que a identificação persista após recarregar do banco.
+  const ehTarefaDePrazo = (t, procId) => t.procId===procId && typeof t.titulo==="string" && t.titulo.startsWith("Cumprir prazo");
+
+  // Salva o prazo do processo E sincroniza a tarefa de prazo correspondente
   const salvarPrazoComTarefa = (procId, novoPrazo) => {
     // 1. Atualiza o prazo do processo (na lista e no modal aberto)
     setProcessos(ps=>ps.map(x=>x.id===procId?{...x, prazo:novoPrazo}:x));
     setSelected(s=>s&&s.id===procId?{...s, prazo:novoPrazo}:s);
-    // 2. Se há um prazo definido, cria uma tarefa pendente vinculada ao processo
-    if(novoPrazo && setTarefas){
-      const proc = processos.find(p=>p.id===procId);
-      const numero = proc?.numero || "";
-      const tituloTarefa = `Cumprir prazo${numero?` — proc. ${numero}`:""}`;
-      setTarefas(ts=>{
-        // Evita duplicar: se já existe tarefa de prazo com a mesma data e título para este processo, não cria outra
-        const jaExiste = ts.some(t=>t.procId===procId && t.prazo===novoPrazo && t.titulo===tituloTarefa && t.status!=="concluido");
-        if(jaExiste) return ts;
+    if(!setTarefas) return;
+    const proc = processos.find(p=>p.id===procId);
+    const numero = proc?.numero || "";
+    const tituloTarefa = `Cumprir prazo${numero?` — proc. ${numero}`:""}`;
+
+    setTarefas(ts=>{
+      const existentePrazo = ts.find(t=>ehTarefaDePrazo(t,procId) && t.status!=="concluido" && !t.arquivada);
+      if(novoPrazo){
+        if(existentePrazo){
+          // PRORROGAÇÃO: atualiza a data da tarefa existente em vez de criar outra
+          return ts.map(t=>t===existentePrazo ? {...t, prazo:novoPrazo, titulo:tituloTarefa} : t);
+        }
+        // Cria nova tarefa de prazo
         return [...ts, {
           id: Date.now()+Math.floor(Math.random()*1000),
           titulo: tituloTarefa,
@@ -2549,12 +2559,31 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           desc: "Tarefa gerada automaticamente ao definir o prazo do processo.",
           arquivada: false,
         }];
-      });
-    }
+      } else {
+        // Prazo REMOVIDO: arquiva a tarefa de prazo pendente (não fica órfã)
+        if(existentePrazo){
+          return ts.map(t=>t===existentePrazo ? {...t, arquivada:true} : t);
+        }
+        return ts;
+      }
+    });
+  };
+
+  // VICE-VERSA: quando uma tarefa COM prazo é criada/editada no processo, atualiza o prazo do processo
+  const sincronizarPrazoDaTarefa = (tarefa) => {
+    if(!tarefa || !tarefa.procId || !tarefa.prazo) return;
+    setProcessos(ps=>ps.map(x=>x.id===tarefa.procId ? {...x, prazo:tarefa.prazo} : x));
+    setSelected(s=>s&&s.id===tarefa.procId ? {...s, prazo:tarefa.prazo} : s);
   };
 
   const concluirTarefaProc = tarefaId => {
     if(!setTarefas) return;
+    // Ao concluir uma tarefa de prazo, limpa o prazo do processo correspondente
+    const tarefa = (tarefas||[]).find(t=>t.id===tarefaId);
+    if(tarefa && tarefa.procId && ehTarefaDePrazo(tarefa, tarefa.procId)){
+      setProcessos(ps=>ps.map(x=>x.id===tarefa.procId ? {...x, prazo:null} : x));
+      setSelected(s=>s&&s.id===tarefa.procId ? {...s, prazo:null} : s);
+    }
     setTarefas(ts=>ts.map(t=>t.id===tarefaId?{...t,status:"concluido"}:t));
   };
   const arquivarTarefaProc = tarefaId => {
@@ -5745,17 +5774,26 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
           const remoto = registrosRemoto || [];
           const idsRemoto = new Set(remoto.map(r=>r.id));
           const novos = registrosLocais.filter(r=>!idsRemoto.has(r.id));
+          let resultado;
           if(novos.length>0){
             const preparados = novos.map(r=>preparar ? preparar(r) : {...r, user_id:uid});
             const {data:inseridos, error} = await sb.from(tabela).insert(preparados).select();
             if(error){
               console.error("Erro seed", tabela, error.message);
-              // Mesmo se o banco recusar, mostramos os dados iniciais na tela para não ficar vazio
-              return [...remoto, ...preparados];
+              resultado = [...remoto, ...preparados];
+            } else {
+              resultado = [...remoto, ...(inseridos||preparados)];
             }
-            return [...remoto, ...(inseridos||preparados)];
+          } else {
+            resultado = remoto;
           }
-          return remoto;
+          // Garante que não haja duplicatas por id (à prova de falhas)
+          const vistos = new Set();
+          return resultado.filter(r=>{
+            if(!r || r.id===undefined || vistos.has(r.id)) return false;
+            vistos.add(r.id);
+            return true;
+          });
         };
 
         const cltsFinais = await mergeInserir("clientes", CLIENTES0, clts, c=>({...c, user_id:uid}));
@@ -6003,7 +6041,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
           })}
         </div>
         <div style={{padding:"14px 20px",borderTop:"1px solid rgba(255,255,255,.08)"}}>
-          <p style={{fontSize:9.5,color:"rgba(255,255,255,.4)",margin:"0 0 8px"}}>OAB/RJ 155.134</p>
+          <p style={{fontSize:9.5,color:"rgba(255,255,255,.4)",margin:"0 0 8px"}}>OAB/RJ 155.134 · v2025-06-29-prazo</p>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
             <span style={{fontSize:10,color:sincStatus==="erro"?"#FCA5A5":sincStatus==="salvando"?"rgba(255,255,255,.5)":"rgba(255,255,255,.35)"}}>
               {sincStatus==="salvando"?"⏳ Salvando…":sincStatus==="salvo"?"✓ Salvo":sincStatus==="erro"?"⚠ Erro ao salvar":"☁ Sincronizado"}
