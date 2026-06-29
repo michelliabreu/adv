@@ -5649,6 +5649,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const [abrirDemandaId,setAbrirDemandaId]=useState(null);
   const uid = sessao?.user?.id;
   const [erroCarga,setErroCarga]=useState("");
+  const [erroSalvar,setErroSalvar]=useState("");
   const tryParse = (val, fallback) => { try { return val ? (typeof val==="string" ? JSON.parse(val) : val) : fallback; } catch(_){ return fallback; } };
   const prevIds = React.useRef({}); // snapshot dos IDs conhecidos de cada tabela (para exclusão segura)
 
@@ -5783,8 +5784,9 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
         prevIds.current[tabela] = idsAtuais;
 
         setSincStatus("salvo");
+        setErroSalvar("");
         setTimeout(()=>setSincStatus(""),2500);
-      } catch(e){ setSincStatus("erro"); console.error("Erro ao salvar:", tabela, e); }
+      } catch(e){ setSincStatus("erro"); setErroSalvar(`Falha ao salvar em "${tabela}": ${e.message||e.code||"erro desconhecido"}`); console.error("Erro ao salvar:", tabela, e); }
     }, delay);
   },[uid, carregandoDados]);
 
@@ -5911,6 +5913,16 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
       {/* Conteúdo */}
       <div style={{flex:1,background:"var(--bg3)",minHeight:"100vh"}}>
         <div style={{maxWidth:1280,margin:"0 auto",padding:"1.75rem 2rem"}}>
+          {erroSalvar&&(
+            <div style={{background:"var(--red-bg)",border:"1px solid #FCA5A5",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+              <div>
+                <p style={{fontSize:12.5,fontWeight:700,color:"var(--red)",margin:"0 0 3px"}}>⚠ Suas alterações NÃO foram salvas no banco</p>
+                <p style={{fontSize:11.5,color:"#7F1D1D",margin:0,lineHeight:1.5}}>{erroSalvar}</p>
+                <p style={{fontSize:11,color:"#991B1B",margin:"5px 0 0",lineHeight:1.5}}>Provável causa: falta rodar o <strong>supabase_setup.sql</strong> atualizado (alguma coluna não existe no banco). Rode-o no SQL Editor do Supabase e recarregue. Me envie esta mensagem se persistir.</p>
+              </div>
+              <button onClick={()=>setErroSalvar("")} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"var(--red)",padding:0,lineHeight:1,flexShrink:0}}>×</button>
+            </div>
+          )}
           {pagina==="dashboard"&&<PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} agenda={agenda} equipe={equipe} onAbrirProcesso={irParaProcesso} onIrPara={setPagina} setProcessos={setProcessosSaved} setClientes={setClientesSaved}/>}
           {pagina==="ficha"&&<PaginaFichaAtendimento clientes={clientes} setClientes={setClientesSaved} processos={processos} setProcessos={setProcessosSaved} demandas={demandas} setDemandas={setDemandasSaved} tarefas={tarefas} setTarefas={setTarefasSaved} equipe={equipe} onConcluido={aoConcluirFicha}/>}
           {pagina==="extrajudicial"&&<PaginaExtrajudicial demandas={demandas} setDemandas={setDemandasSaved} clientes={clientes} tarefas={tarefas} setTarefas={setTarefasSaved} tiposCustom={tiposExtraCustom} setTiposCustom={setTiposExtraCustom} onNovoCliente={()=>setPedirNovoCliente(true)}/>}
