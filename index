@@ -5738,6 +5738,17 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   // SEGURO: nunca apaga em massa. Apenas insere/atualiza (upsert).
   // Exclusões são feitas explicitamente pela função excluirDoBanco.
   const saveTimer = React.useRef({});
+  // Colunas válidas por tabela — envia só o que existe no banco, evitando que um campo
+  // extra (ex: coluna não criada) faça o upsert inteiro falhar e nada ser salvo.
+  const COLUNAS = {
+    processos: ["id","clienteId","numero","sistema","tipo","assunto","autor","reu","partes","vara","responsavel","valorCausa","classificacao","status","prazo","prazoProcessual","obs","arquivado","situacaoArquivo","audiencia","andamentos","checklist","exitos","debito","documentos","driveLink","vinculo"],
+    clientes: ["id","nome","cpf","rg","profissao","estadoCivil","nacionalidade","telefone","email","endereco","obs"],
+    parcelas: ["id","procId","cliente","totalContrato","parcela","totalParcelas","valor","vencimento","pago"],
+    tarefas: ["id","titulo","responsavelId","procId","demandaId","clienteId","status","prioridade","prazo","desc","arquivada"],
+    agenda: ["id","titulo","tipo","dataHora","procId","clienteId","responsavelId","local","confirmado","obs","_origemAudiencia","_origemPrazo"],
+    demandas: ["id","clienteId","tipo","descricao","status","responsavel","prazo","valorCausa","obs"],
+  };
+  const JSON_FIELDS = ["andamentos","partes","checklist","exitos","debito","documentos","audiencia","vinculo"];
   const autoSave = React.useCallback((tabela, dados, delay=1200) => {
     if(carregandoDados) return;
     if(!Array.isArray(dados)) return;
@@ -5745,28 +5756,26 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
     setSincStatus("salvando");
     saveTimer.current[tabela] = setTimeout(async()=>{
       try {
+        const cols = COLUNAS[tabela];
         // Salva (insere ou atualiza) todos os itens atuais
         if(dados.length>0){
-          const comUser = dados.map(d=>({...d, user_id:uid,
-            andamentos: d.andamentos!==undefined ? JSON.stringify(d.andamentos) : undefined,
-            partes: d.partes!==undefined ? JSON.stringify(d.partes) : undefined,
-            checklist: d.checklist!==undefined ? JSON.stringify(d.checklist) : undefined,
-            exitos: d.exitos!==undefined ? JSON.stringify(d.exitos) : undefined,
-            debito: d.debito!==undefined ? JSON.stringify(d.debito) : undefined,
-            documentos: d.documentos!==undefined ? JSON.stringify(d.documentos) : undefined,
-          }));
+          const comUser = dados.map(d=>{
+            const obj = { user_id: uid };
+            (cols||Object.keys(d)).forEach(c=>{
+              if(d[c]===undefined) return;
+              obj[c] = JSON_FIELDS.includes(c) ? JSON.stringify(d[c]) : d[c];
+            });
+            return obj;
+          });
           const { error } = await sb.from(tabela).upsert(comUser, {onConflict:"id"});
           if(error) throw error;
         }
 
-        // Exclusão SEGURA: só remove do banco os itens que ESTAVAM na tela
-        // e foram removidos pelo usuário nesta sessão (comparação com snapshot anterior).
-        // Nunca apaga com base apenas no array atual estar vazio.
+        // Exclusão SEGURA: só remove do banco itens removidos pelo usuário (remoção parcial).
         const idsAtuais = new Set(dados.map(d=>d.id).filter(Boolean));
         const idsAnteriores = prevIds.current[tabela];
         if(idsAnteriores && idsAnteriores.size>0){
           const removidos = [...idsAnteriores].filter(id=>!idsAtuais.has(id));
-          // Só apaga se a remoção for "pequena" (ação real do usuário), nunca um esvaziamento total
           if(removidos.length>0 && removidos.length < idsAnteriores.size){
             await sb.from(tabela).delete().eq("user_id",uid).in("id",removidos);
           }
