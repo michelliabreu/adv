@@ -2417,6 +2417,8 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const [selecionados,setSelecionados]=useState(new Set());
   const [modoSelecao,setModoSelecao]=useState(false);
   const [acaoLote,setAcaoLote]=useState(null); // qual modal de ação em lote está aberto
+  const [ordenarPor,setOrdenarPor]=useState("numero"); // coluna padrão: número
+  const [direcao,setDirecao]=useState("asc"); // "asc" ou "desc"
 
   React.useEffect(()=>{
     if(abrirProcessoId){
@@ -2427,6 +2429,18 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   },[abrirProcessoId]);
 
   const clienteDe = p => clientes.find(c=>c.id===p.clienteId);
+
+  // Ordena processos por coluna clicada. Se clica na mesma coluna, inverte a direção.
+  const ordenar = (coluna) => {
+    if(ordenarPor===coluna){
+      setDirecao(direcao==="asc" ? "desc" : "asc");
+    } else {
+      setOrdenarPor(coluna);
+      setDirecao("asc");
+    }
+  };
+
+  // Comparador genérico para ordenar arrays de processos
 
   // ── Exclusão e ações em lote ──────────────────────────────
   const excluirProcesso = (id) => {
@@ -2749,7 +2763,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
 
   const lista=useMemo(()=>{
     const q=busca.toLowerCase();
-    return processos.filter(p=>{
+    let filtrada = processos.filter(p=>{
       if(normalizarStatus(p.status)!==aba) return false;
       if(q && !(p.numero.includes(q)||p.autor.toLowerCase().includes(q)||p.reu.toLowerCase().includes(q)||(p.responsavel||"").toLowerCase().includes(q))) return false;
       if(filtroCliente && String(p.clienteId)!==filtroCliente) return false;
@@ -2760,7 +2774,20 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       if(filtroResponsavel && p.responsavel!==filtroResponsavel) return false;
       return true;
     });
-  },[processos,aba,busca,filtroCliente,filtroAno,filtroClassificacao,filtroSistema,filtroVara,filtroResponsavel]);
+    // Ordena a lista filtrada pela coluna selecionada
+    filtrada.sort((a,b)=>{
+      let vA = a[ordenarPor];
+      let vB = b[ordenarPor];
+      if(vA==null && vB==null) return 0;
+      if(vA==null) return 1;
+      if(vB==null) return -1;
+      if(typeof vA==="number" && typeof vB==="number") return vA-vB;
+      if(typeof vA==="string" && typeof vB==="string") return vA.localeCompare(vB, "pt-BR");
+      return 0;
+    });
+    if(direcao==="desc") filtrada.reverse();
+    return filtrada;
+  },[processos,aba,busca,filtroCliente,filtroAno,filtroClassificacao,filtroSistema,filtroVara,filtroResponsavel,ordenarPor,direcao]);
   const salvar=form=>{
     let dados = {...form};
     // Se digitou um nome de cliente que não existe, cria o cliente automaticamente (só com o nome)
@@ -2891,7 +2918,12 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"2.4fr 1.4fr 1.4fr .8fr .5fr",padding:"11px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:14}}>
-          {["Processo","Cliente","Ação / Foro","Últ. mov.","Status"].map(h=><span key={h} style={hdr}>{h}</span>)}
+          {[{label:"Processo",col:"numero"},{label:"Cliente",col:"clienteId"},{label:"Ação / Foro",col:"vara"},{label:"Últ. mov.",col:"ultimoAto"},{label:"Status",col:"status"}].map(h=>(
+            <span key={h.col} onClick={()=>ordenar(h.col)} style={{...hdr,cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:4}}>
+              {h.label}
+              {ordenarPor===h.col && <span style={{fontSize:11,fontWeight:700}}>{direcao==="asc"?"▲":"▼"}</span>}
+            </span>
+          ))}
         </div>
         {lista.length===0?<div style={{padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum processo encontrado.</div>:lista.map((p,i)=>{
           const urg=isUrgProc(p),dias=p.prazo?diasRest(p.prazo):0;
@@ -4816,6 +4848,12 @@ function PaginaTarefas({tarefas, setTarefas, equipe, processos, clientes}){
   const arquivarTarefa = id => {
     setTarefas(ts => ts.map(t => t.id===id ? {...t, arquivada:true} : t));
   };
+  const desarquivarTarefa = id => {
+    setTarefas(ts => ts.map(t => t.id===id ? {...t, arquivada:false} : t));
+  };
+  const reabrirTarefa = id => {
+    setTarefas(ts => ts.map(t => t.id===id ? {...t, status:"pendente", arquivada:false} : t));
+  };
 
   const colunas = [
     {key:"pendente", label:"Pendente"},
@@ -4890,11 +4928,14 @@ function PaginaTarefas({tarefas, setTarefas, equipe, processos, clientes}){
                       </div>
                       {t.clienteId && <p style={{fontSize:10.5,color:"var(--accent)",margin:"0 0 2px"}}>👤 {nomeCliente(t.clienteId)}</p>}
                       {t.procId && <p style={{fontSize:10,fontFamily:"monospace",color:"var(--text2)",margin:"0 0 4px"}}>{numProc(t.procId).slice(0,20)}…</p>}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <p style={{fontSize:10.5,color:"var(--text2)",margin:0}}>👷 {nomeResp(t.responsavelId)}</p>
-                        {col.key==="concluido" && (
-                          <button onClick={e=>{e.stopPropagation();arquivarTarefa(t.id);}} style={{fontSize:9,padding:"2px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>📦 Arquivar</button>
-                        )}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
+                        <p style={{fontSize:10.5,color:"var(--text2)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>👷 {nomeResp(t.responsavelId)}</p>
+                        <div style={{display:"flex",gap:4,flexShrink:0}}>
+                          {col.key==="concluido" && (
+                            <button onClick={e=>{e.stopPropagation();reabrirTarefa(t.id);}} title="Reabrir tarefa (voltar para pendente)" style={{fontSize:9,padding:"2px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--accent)",fontWeight:600,whiteSpace:"nowrap"}}>↩ Reabrir</button>
+                          )}
+                          <button onClick={e=>{e.stopPropagation();arquivarTarefa(t.id);}} title="Arquivar tarefa" style={{fontSize:9,padding:"2px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>📦</button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -4909,14 +4950,18 @@ function PaginaTarefas({tarefas, setTarefas, equipe, processos, clientes}){
       {arquivadas.length>0 && (
         <div style={{marginTop:18}}>
           <button onClick={()=>setVerArquivadas(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11.5,color:"var(--text2)",fontWeight:600,padding:0}}>
-            {verArquivadas?"▾":"▸"} {arquivadas.length} tarefa(s) concluída(s) e arquivada(s)
+            {verArquivadas?"▾":"▸"} {arquivadas.length} tarefa(s) arquivada(s)
           </button>
           {verArquivadas && (
             <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:10}}>
               {arquivadas.map(t=>(
-                <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"8px 12px",background:"#fff",border:"1px solid var(--border1)",borderRadius:6}}>
-                  <span style={{color:"var(--text2)",textDecoration:"line-through"}}>{t.titulo}</span>
-                  <span style={{fontSize:10.5,color:"var(--text3)"}}>{numProc(t.procId)?.slice(0,18)}{t.procId?"…":""}</span>
+                <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:12,padding:"8px 12px",background:"#fff",border:"1px solid var(--border1)",borderRadius:6}}>
+                  <span style={{color:"var(--text2)",textDecoration:"line-through",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.titulo}</span>
+                  <span style={{fontSize:10.5,color:"var(--text3)",whiteSpace:"nowrap"}}>{numProc(t.procId)?.slice(0,18)}{t.procId?"…":""}</span>
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    <button onClick={()=>reabrirTarefa(t.id)} title="Reabrir (voltar para pendente)" style={{fontSize:9,padding:"3px 8px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--accent)",fontWeight:600,whiteSpace:"nowrap"}}>↩ Reabrir</button>
+                    <button onClick={()=>desarquivarTarefa(t.id)} title="Desarquivar (manter status, tirar do arquivo)" style={{fontSize:9,padding:"3px 8px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>📤 Desarquivar</button>
+                  </div>
                 </div>
               ))}
             </div>
