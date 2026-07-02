@@ -5782,7 +5782,15 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const [tiposExtraCustom,setTiposExtraCustom]=useState([]);
   const [classificacoesCustom,setClassificacoesCustom]=useState([]);
   const [abrirDemandaId,setAbrirDemandaId]=useState(null);
-  const uid = sessao?.user?.id;
+  const uid = sessao?.user?.id || sessionStorage.getItem("_michelli_uid");
+  
+  // Guarda o uid no sessionStorage para fallback (em caso de timing)
+  React.useEffect(()=>{
+    if(sessao?.user?.id){
+      sessionStorage.setItem("_michelli_uid", sessao.user.id);
+    }
+  },[sessao]);
+  
   const [erroCarga,setErroCarga]=useState("");
   const [erroSalvar,setErroSalvar]=useState("");
   const tryParse = (val, fallback) => { try { return val ? (typeof val==="string" ? JSON.parse(val) : val) : fallback; } catch(_){ return fallback; } };
