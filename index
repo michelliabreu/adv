@@ -2539,34 +2539,49 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     }]);
   };
 
-  // Identifica a tarefa de prazo de um processo (gerada automaticamente).
-  // Usa o título padrão para que a identificação persista após recarregar do banco.
-  const ehTarefaDePrazo = (t, procId) => t.procId===procId && typeof t.titulo==="string" && t.titulo.startsWith("Cumprir prazo");
+  // Identifica UNICAMENTE a tarefa de prazo de um processo.
+  // Usa tanto título quanto procId para garantir que é a tarefa de prazo DESTE processo.
+  const ehTarefaDePrazo = (t) => {
+    return t && t.procId && typeof t.titulo === "string" && t.titulo.startsWith("Cumprir prazo — proc.");
+  };
 
-  // Salva o prazo do processo E sincroniza a tarefa de prazo correspondente
+  // Encontra a tarefa de prazo para um processo específico (retorna null se não existe)
+  const encontrarTarefaDePrazo = (procId) => {
+    return (tarefas || []).find(t => ehTarefaDePrazo(t) && t.procId === procId && t.status !== "concluido" && !t.arquivada) || null;
+  };
+
+  // Salva prazo do processo e sincroniza tarefa de prazo correspondente
   const salvarPrazoComTarefa = (procId, novoPrazo) => {
-    // 1. Atualiza o prazo do processo (na lista e no modal aberto)
-    setProcessos(ps=>ps.map(x=>x.id===procId?{...x, prazo:novoPrazo}:x));
-    setSelected(s=>s&&s.id===procId?{...s, prazo:novoPrazo}:s);
-    if(!setTarefas) return;
-    const proc = processos.find(p=>p.id===procId);
-    const numero = proc?.numero || "";
-    const tituloTarefa = `Cumprir prazo${numero?` — proc. ${numero}`:""}`;
+    if (!procId) return;
+    
+    // 1. Atualiza prazo no processo (lista e modal)
+    setProcessos(ps => ps.map(x => x.id === procId ? {...x, prazo: novoPrazo} : x));
+    setSelected(s => s && s.id === procId ? {...s, prazo: novoPrazo} : s);
+    
+    if (!setTarefas) return;
+    
+    const proc = processos.find(p => p.id === procId);
+    if (!proc) return; // Valida que processo existe
+    
+    const numero = proc.numero || "";
+    const tituloTarefa = `Cumprir prazo — proc. ${numero}`;
 
-    setTarefas(ts=>{
-      const existentePrazo = ts.find(t=>ehTarefaDePrazo(t,procId) && t.status!=="concluido" && !t.arquivada);
-      if(novoPrazo){
-        if(existentePrazo){
-          // PRORROGAÇÃO: atualiza a data da tarefa existente em vez de criar outra
-          return ts.map(t=>t===existentePrazo ? {...t, prazo:novoPrazo, titulo:tituloTarefa} : t);
+    setTarefas(ts => {
+      if (!Array.isArray(ts)) return ts;
+      const existente = encontrarTarefaDePrazo(procId);
+      
+      if (novoPrazo) {
+        if (existente) {
+          // PRORROGAÇÃO: atualiza a tarefa existente (NUNCA duplica)
+          return ts.map(t => t.id === existente.id ? {...t, prazo: novoPrazo, titulo: tituloTarefa} : t);
         }
         // Cria nova tarefa de prazo
         return [...ts, {
-          id: Date.now()+Math.floor(Math.random()*1000),
+          id: Date.now() + Math.floor(Math.random() * 10000),
           titulo: tituloTarefa,
           responsavelId: "",
           procId: procId,
-          clienteId: proc?.clienteId || "",
+          clienteId: proc.clienteId || "",
           status: "pendente",
           prioridade: "alta",
           prazo: novoPrazo,
@@ -2574,31 +2589,37 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           arquivada: false,
         }];
       } else {
-        // Prazo REMOVIDO: arquiva a tarefa de prazo pendente (não fica órfã)
-        if(existentePrazo){
-          return ts.map(t=>t===existentePrazo ? {...t, arquivada:true} : t);
+        // Prazo REMOVIDO: arquiva a tarefa de prazo (não fica órfã)
+        if (existente) {
+          return ts.map(t => t.id === existente.id ? {...t, arquivada: true} : t);
         }
         return ts;
       }
     });
   };
 
-  // VICE-VERSA: quando uma tarefa COM prazo é criada/editada no processo, atualiza o prazo do processo
+  // VICE-VERSA: sincronizar prazo quando tarefa é editada
   const sincronizarPrazoDaTarefa = (tarefa) => {
-    if(!tarefa || !tarefa.procId || !tarefa.prazo) return;
-    setProcessos(ps=>ps.map(x=>x.id===tarefa.procId ? {...x, prazo:tarefa.prazo} : x));
-    setSelected(s=>s&&s.id===tarefa.procId ? {...s, prazo:tarefa.prazo} : s);
+    if (!tarefa || !tarefa.procId) return;
+    // Se é uma tarefa de prazo, atualiza o prazo do processo
+    if (ehTarefaDePrazo(tarefa) && tarefa.prazo) {
+      setProcessos(ps => ps.map(x => x.id === tarefa.procId ? {...x, prazo: tarefa.prazo} : x));
+      setSelected(s => s && s.id === tarefa.procId ? {...s, prazo: tarefa.prazo} : s);
+    }
   };
 
+  // Concluir tarefa de prazo limpa o prazo do processo
   const concluirTarefaProc = tarefaId => {
-    if(!setTarefas) return;
-    // Ao concluir uma tarefa de prazo, limpa o prazo do processo correspondente
-    const tarefa = (tarefas||[]).find(t=>t.id===tarefaId);
-    if(tarefa && tarefa.procId && ehTarefaDePrazo(tarefa, tarefa.procId)){
-      setProcessos(ps=>ps.map(x=>x.id===tarefa.procId ? {...x, prazo:null} : x));
-      setSelected(s=>s&&s.id===tarefa.procId ? {...s, prazo:null} : s);
+    if (!setTarefas || !tarefaId) return;
+    const tarefa = (tarefas || []).find(t => t.id === tarefaId);
+    
+    if (tarefa && ehTarefaDePrazo(tarefa) && tarefa.procId) {
+      // Ao concluir tarefa de prazo, limpa o prazo do processo
+      setProcessos(ps => ps.map(x => x.id === tarefa.procId ? {...x, prazo: null} : x));
+      setSelected(s => s && s.id === tarefa.procId ? {...s, prazo: null} : s);
     }
-    setTarefas(ts=>ts.map(t=>t.id===tarefaId?{...t,status:"concluido"}:t));
+    
+    setTarefas(ts => ts.map(t => t.id === tarefaId ? {...t, status: "concluido"} : t));
   };
   const arquivarTarefaProc = tarefaId => {
     if(!setTarefas) return;
@@ -2631,7 +2652,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     if(setAgenda && info.vencimento){
       setAgenda(ag=>{
         // remove compromisso de prazo anterior deste processo (evita duplicar ao reanalisar)
-        const semAntigo = ag.filter(c=>!(c.procId===procId && c._origemPrazo));
+        const semAntigo = ag.filter(c => !(c.procId === procId && c.titulo?.startsWith("Prazo")));
         const novoCompromisso = {
           id: Date.now(),
           titulo: `Prazo: ${info.proximoAto}`,
@@ -2643,7 +2664,6 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           local: "",
           confirmado: true,
           obs: `Parte responsável: ${info.parte}${info.base?` · Base legal: ${info.base}`:""}`,
-          _origemPrazo: true,
         };
         return [...semAntigo, novoCompromisso];
       });
@@ -2653,14 +2673,14 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const cumprirPrazo=id=>{
     setProcessos(ps=>ps.map(p=>p.id===id?{...p,prazoProcessual:null,status:"em_andamento"}:p));
     setSelected(s=>s&&s.id===id?{...s,prazoProcessual:null,status:"em_andamento"}:s);
-    if(setAgenda) setAgenda(ag=>ag.filter(c=>!(c.procId===id && c._origemPrazo)));
+    if(setAgenda) setAgenda(ag=>ag.filter(c => !(c.procId === id && c.titulo?.startsWith("Prazo"))));
   };
   const saveAudiencia=(id, info)=>{
     setProcessos(ps=>ps.map(p=>p.id===id?{...p,audiencia:info}:p));
     setSelected(s=>s&&s.id===id?{...s,audiencia:info}:s);
     if(setAgenda){
       setAgenda(ag=>{
-        const semAntiga = ag.filter(c=>!(c.procId===id && c._origemAudiencia));
+        const semAntiga = ag.filter(c => !(c.procId === id && c.titulo?.includes("audiência")));
         if(!info || !info.data) return semAntiga;
         const proc = processos.find(x=>x.id===id);
         const novoCompromisso = {
@@ -2674,7 +2694,6 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           local: info.local || "",
           confirmado: true,
           obs: "",
-          _origemAudiencia: true,
         };
         return [...semAntiga, novoCompromisso];
       });
@@ -5902,7 +5921,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
     clientes: ["id","nome","cpf","rg","profissao","estadoCivil","nacionalidade","telefone","email","endereco","obs"],
     parcelas: ["id","procId","cliente","totalContrato","parcela","totalParcelas","valor","vencimento","pago"],
     tarefas: ["id","titulo","responsavelId","procId","demandaId","clienteId","status","prioridade","prazo","desc","arquivada"],
-    agenda: ["id","titulo","tipo","dataHora","procId","clienteId","responsavelId","local","confirmado","obs","_origemAudiencia","_origemPrazo"],
+    agenda: ["id","titulo","tipo","dataHora","procId","clienteId","responsavelId","local","confirmado","obs"],
     demandas: ["id","clienteId","tipo","descricao","status","responsavel","prazo","valorCausa","obs"],
   };
   const JSON_FIELDS = ["andamentos","partes","checklist","exitos","debito","documentos","audiencia","vinculo"];
@@ -5917,6 +5936,8 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
         const prepararRegistro = (d) => {
           const obj = { user_id: uid };
           (cols||Object.keys(d)).forEach(c=>{
+            // Pula colunas que não existem na whitelist
+            if(cols && !cols.includes(c)) return;
             if(d[c]===undefined) return;
             obj[c] = JSON_FIELDS.includes(c) ? JSON.stringify(d[c]) : d[c];
           });
