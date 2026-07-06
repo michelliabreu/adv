@@ -5972,7 +5972,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
     processos: ["id","clienteId","numero","sistema","tipo","assunto","autor","reu","partes","vara","responsavel","valorCausa","classificacao","status","prazo","prazoProcessual","obs","arquivado","situacaoArquivo","audiencia","andamentos","checklist","exitos","debito","documentos","driveLink","vinculo"],
     clientes: ["id","nome","cpf","rg","profissao","estadoCivil","nacionalidade","telefone","email","endereco","obs"],
     parcelas: ["id","procId","cliente","totalContrato","parcela","totalParcelas","valor","vencimento","pago"],
-    tarefas: ["id","titulo","responsavelId","procId","demandaId","clienteId","status","prioridade","prazo","desc","arquivada"],
+    tarefas: ["id","user_id","titulo","responsavelId","procId","demandaId","clienteId","status","prioridade","prazo","desc","arquivada"],
     agenda: ["id","titulo","tipo","dataHora","procId","clienteId","responsavelId","local","confirmado","obs"],
     demandas: ["id","user_id","clienteId","tipo","descricao","status","responsavel","prazo","valorCausa","obs"],
   };
