@@ -858,6 +858,7 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
   const p = (processos||[]).find(x=>x.id===pProp.id) || pProp;
   const [tab,setTab]=useState("andamentos");
   const [editandoDebito,setEditandoDebito]=useState(false);
+  const [editandoDescricaoPrazo,setEditandoDescricaoPrazo]=useState(false);
   const [novoAndDesc,setNovoAndDesc]=useState("");
   const [novoAndData,setNovoAndData]=useState(hoje.toISOString().slice(0,10));
   const [novoAndDecisao,setNovoAndDecisao]=useState(false);
@@ -981,6 +982,31 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
           <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Vara</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.vara}</p></div>
           <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Responsável</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.responsavel||"—"}</p></div>
           <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Valor da causa</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.valorCausa?fmtBRL(parseFloat(p.valorCausa)):"—"}</p></div>
+        </div>
+
+        {/* Descrição do prazo */}
+        <div style={{marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:0,fontWeight:600}}>Descrição do prazo</p>
+            {editandoDescricaoPrazo ? (
+              <button onClick={()=>setEditandoDescricaoPrazo(false)} style={{...btnSec,fontSize:9.5,padding:"3px 8px"}}>✓</button>
+            ) : (
+              <button onClick={()=>setEditandoDescricaoPrazo(true)} style={{...btnSec,fontSize:9.5,padding:"3px 8px"}}>✎</button>
+            )}
+          </div>
+          {editandoDescricaoPrazo ? (
+            <textarea 
+              autoFocus
+              value={p.descricaoPrazo||""} 
+              onChange={e=>onSaveCampo(p.id,"descricaoPrazo",e.target.value)}
+              placeholder="Ex: Protocolar petição até esta data, Aguardar resposta da outra parte, Juntar documentos..."
+              style={{...inp,width:"100%",minHeight:60,padding:"10px",fontFamily:"inherit",fontSize:12,lineHeight:1.4,resize:"vertical"}}
+            />
+          ) : (
+            <p style={{fontSize:12,color:p.descricaoPrazo?"var(--text1)":"var(--text2)",margin:0,padding:"8px 0",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+              {p.descricaoPrazo || "Nenhuma descrição adicionada"}
+            </p>
+          )}
         </div>
 
         {/* Débito */}
@@ -5698,7 +5724,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   // Colunas válidas por tabela — envia só o que existe no banco, evitando que um campo
   // extra (ex: coluna não criada) faça o upsert inteiro falhar e nada ser salvo.
   const COLUNAS = {
-    processos: ["id","clienteId","numero","sistema","tipo","assunto","autor","reu","partes","vara","responsavel","valorCausa","classificacao","status","prazo","prazoProcessual","obs","arquivado","situacaoArquivo","audiencia","andamentos","checklist","exitos","debito","documentos","driveLink","vinculo"],
+    processos: ["id","clienteId","numero","sistema","tipo","assunto","autor","reu","partes","vara","responsavel","valorCausa","classificacao","status","prazo","descricaoPrazo","prazoProcessual","obs","arquivado","situacaoArquivo","audiencia","andamentos","checklist","exitos","debito","documentos","driveLink","vinculo"],
     clientes: ["id","nome","cpf","rg","profissao","estadoCivil","nacionalidade","telefone","email","endereco","obs"],
     parcelas: ["id","procId","cliente","totalContrato","parcela","totalParcelas","valor","vencimento","pago"],
     tarefas: ["id","user_id","titulo","responsavelId","procId","demandaId","clienteId","status","prioridade","prazo","desc","arquivada"],
@@ -5852,7 +5878,6 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
     {id:"documentos",label:"Documentos",icon:"📄"},
     {id:"financeiro",label:"Financeiro",icon:"💰"},
     {id:"agenda",label:"Agenda",icon:"📅"},
-    {id:"tarefas",label:"Tarefas",icon:"✅"},
     {id:"equipe",label:"Equipe",icon:"🧑‍💼"},
     {id:"relatorios",label:"Relatórios",icon:"📊"},
     {id:"importar",label:"Importar",icon:"⚡"},
