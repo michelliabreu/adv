@@ -872,10 +872,6 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
   const [registrandoExito,setRegistrandoExito]=useState(false);
   const [enviandoCobranca,setEnviandoCobranca]=useState(null);
   const [editandoAudiencia,setEditandoAudiencia]=useState(false);
-  const [editandoPrazo,setEditandoPrazo]=useState(false);
-  const [mostrarModalTarefaPrazo,setMostrarModalTarefaPrazo]=useState(null); // {procId, dataPrazo}
-  const [nomeTarefaPrazo,setNomeTarefaPrazo]=useState("");
-  const [prazoForm,setPrazoForm]=useState(p.prazo||"");
   const [editandoPartes,setEditandoPartes]=useState(false);
   const [partesForm,setPartesForm]=useState([]);
   const [audienciaData,setAudienciaData]=useState(p.audiencia?.data||"");
@@ -984,33 +980,6 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 24px",marginBottom:14}}>
           <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Vara</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.vara}</p></div>
           <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Responsável</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.responsavel||"—"}</p></div>
-          <div>
-            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Prazo do processo</p>
-            {editandoPrazo ? (
-              <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-                <input type="date" autoFocus value={prazoForm||""} onChange={e=>setPrazoForm(e.target.value)} style={{...inp,padding:"4px 7px",fontSize:12,flex:1,minWidth:130}}/>
-                <button onClick={()=>{
-                  if(prazoForm){
-                    // Pede o nome da tarefa que será criada
-                    const nomeTarefa = prompt("Qual é a tarefa para este prazo?\n\nEx: Protocolar petição, Aguardar resposta, Juntar documentos...");
-                    if(nomeTarefa) {
-                      salvarPrazoComTarefaNomeada(p.id, prazoForm, nomeTarefa);
-                      setEditandoPrazo(false);
-                    }
-                  } else {
-                    // Sem prazo, só salva
-                    if(onSavePrazoComTarefa) onSavePrazoComTarefa(p.id, null);
-                    else onSaveCampo(p.id,"prazo",null);
-                    setEditandoPrazo(false);
-                  }
-                }} style={{...btnPri,fontSize:10,padding:"4px 9px"}}>OK</button>
-                <button onClick={()=>{setPrazoForm("");onSaveCampo(p.id,"prazo",null);setEditandoPrazo(false);}} title="Deixar sem prazo" style={{...btnSec,fontSize:10,padding:"4px 8px"}}>Sem prazo</button>
-                <button onClick={()=>setEditandoPrazo(false)} style={{...btnSec,fontSize:10,padding:"4px 8px"}}>Cancelar</button>
-              </div>
-            ) : (
-              <p onClick={()=>{setPrazoForm(p.prazo||"");setEditandoPrazo(true);}} style={{fontSize:13,fontWeight:600,margin:0,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>{p.prazo?fmtData(p.prazo):<span style={{color:"var(--text3)",fontWeight:400}}>Sem prazo</span>} <span style={{fontSize:10,color:"var(--text3)"}}>✎</span></p>
-            )}
-          </div>
           <div><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".7px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>Valor da causa</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.valorCausa?fmtBRL(parseFloat(p.valorCausa)):"—"}</p></div>
         </div>
 
@@ -1117,7 +1086,7 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
 
         <div style={{borderTop:"1px solid var(--border1)",paddingTop:14,marginTop:16}}>
           <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"1px solid var(--border1)"}}>
-            {["andamentos","tarefas","documentacao","checklist"].map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:tab===t?"2px solid var(--navy2)":"2px solid transparent",color:tab===t?"var(--navy2)":"var(--text2)",padding:"6px 18px 8px",fontSize:12,fontWeight:tab===t?600:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".6px",marginBottom:-1,whiteSpace:"nowrap"}}>{t==="documentacao"?"Documentação":t==="checklist"?"Obs / Checklist":t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
+            {["andamentos","documentacao","checklist"].map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:tab===t?"2px solid var(--navy2)":"2px solid transparent",color:tab===t?"var(--navy2)":"var(--text2)",padding:"6px 18px 8px",fontSize:12,fontWeight:tab===t?600:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".6px",marginBottom:-1,whiteSpace:"nowrap"}}>{t==="documentacao"?"Documentação":t==="checklist"?"Obs / Checklist":t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
           </div>
           {tab==="andamentos"&&<div>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
@@ -1144,41 +1113,6 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
                 </span>
               </div>
             ))}
-          </div>}
-          {tab==="tarefas"&&<div>
-            <div style={{display:"flex",gap:8,marginBottom:14}}>
-              <input value={novaTarefaTitulo} onChange={e=>setNovaTarefaTitulo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){onAddTarefaProcesso(p.id,novaTarefaTitulo);setNovaTarefaTitulo("");}}} placeholder="Ex: Elaborar substabelecimento…" style={{...inp,flex:1}}/>
-              <button onClick={()=>{onAddTarefaProcesso(p.id,novaTarefaTitulo);setNovaTarefaTitulo("");}} style={{...btnPri,fontSize:11.5,whiteSpace:"nowrap"}}>+ Criar tarefa</button>
-            </div>
-            <p style={{fontSize:10.5,color:"var(--text2)",margin:"0 0 14px"}}>A tarefa é criada como <strong>Pendente</strong> no quadro de Tarefas, vinculada a este processo.</p>
-
-            {(tarefasDoProcesso||[]).filter(t=>!t.arquivada).length===0
-              ? <div style={{fontSize:13,color:"var(--text2)"}}>Nenhuma tarefa ativa para este processo.</div>
-              : (tarefasDoProcesso||[]).filter(t=>!t.arquivada).map(t=>{
-                  const cfg = STATUS_TAREFA_CFG[t.status];
-                  return (
-                    <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"1px solid var(--border1)",borderRadius:6,padding:"9px 12px",marginBottom:8}}>
-                      <div>
-                        <p style={{fontSize:12.5,fontWeight:600,margin:"0 0 4px"}}>{t.titulo}</p>
-                        <Pill bg={cfg.bg} color={cfg.color} label={cfg.label} sm/>
-                      </div>
-                      {t.status!=="concluido"
-                        ? <button onClick={()=>onConcluirTarefaProc(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",whiteSpace:"nowrap"}}>✓ Concluir</button>
-                        : <button onClick={()=>onArquivarTarefaProc(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",whiteSpace:"nowrap",color:"var(--text2)"}}>📦 Arquivar</button>
-                      }
-                    </div>
-                  );
-                })
-            }
-
-            {(tarefasDoProcesso||[]).filter(t=>t.arquivada).length>0 && (
-              <div style={{marginTop:16}}>
-                <p style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",color:"var(--text2)",margin:"0 0 8px"}}>Concluídas e arquivadas</p>
-                {(tarefasDoProcesso||[]).filter(t=>t.arquivada).map(t=>(
-                  <div key={t.id} style={{fontSize:12,color:"var(--text2)",padding:"6px 0",borderBottom:"1px solid var(--border1)",textDecoration:"line-through"}}>{t.titulo}</div>
-                ))}
-              </div>
-            )}
           </div>}
           {tab==="documentacao"&&<ChecklistDocumentacao processo={p} cliente={cliente} onUpdate={onChecklistUpdate} onSaveDriveLink={onSaveDriveLink}/>}
           {tab==="checklist"&&<ChecklistPanel processo={p} onUpdate={onChecklistUpdate}/>}
@@ -2103,7 +2037,7 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
   );
 }
 
-function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes}){
+function PaginaDashboard({processos, parcelas, clientes,  agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes}){
   const tarefasPendentes = (tarefas||[]).filter(t=>t.status!=="concluido");
   const tarefasAtrasadas = tarefasPendentes.filter(t=>t.prazo&&diasRest(t.prazo)<0);
   const hojeStr = hoje.toISOString().slice(0,10);
@@ -3536,7 +3470,7 @@ function ModalCriarTarefaIntimacao({intimacao, equipe, onConfirm, onClose}){
   );
 }
 
-function PaginaIntimacoes({processos, clientes, equipe, setProcessos, setTarefas, publicacoes, setPublicacoes}){
+function PaginaIntimacoes({processos, clientes, equipe, setProcessos,  publicacoes, setPublicacoes}){
   const [numeroOab, setNumeroOab] = useState("155134");
   const [ufOab, setUfOab] = useState("RJ");
   const [textoColado, setTextoColado] = useState("");
@@ -3951,7 +3885,7 @@ function ModalDetalheExtrajudicial({demanda, cliente, tarefasDaDemanda, onClose,
   );
 }
 
-function PaginaExtrajudicial({demandas, setDemandas, clientes, tarefas, setTarefas, tiposCustom, setTiposCustom, onNovoCliente}){
+function PaginaExtrajudicial({demandas, setDemandas, clientes,  setTarefas, tiposCustom, setTiposCustom, onNovoCliente}){
   const [busca,setBusca] = useState("");
   const [filtroStatus,setFiltroStatus] = useState("todos");
   const [novo,setNovo] = useState(false);
@@ -4277,7 +4211,7 @@ function ModalDocumentosGerados({pessoa, dados, onClose}){
   );
 }
 
-function PaginaFichaAtendimento({clientes, setClientes, processos, setProcessos, demandas, setDemandas, tarefas, setTarefas, equipe, onConcluido}){
+function PaginaFichaAtendimento({clientes, setClientes, processos, setProcessos, demandas, setDemandas,  setTarefas, equipe, onConcluido}){
   const [cliente,setCliente] = useState(pessoaVazia());
   const [clienteExistenteId,setClienteExistenteId] = useState("");
   const [adversa,setAdversa] = useState(pessoaVazia());
@@ -4897,211 +4831,6 @@ function ModalFormTarefa({tarefa, equipe, processos, clientes, onSave, onClose})
 }
 
 // ── Página Tarefas ─────────────────────────────────────────
-function PaginaTarefas({tarefas, setTarefas, equipe, processos, clientes}){
-  const [editando, setEditando] = useState(null);
-  const [novo, setNovo] = useState(false);
-  const [filtroResp, setFiltroResp] = useState("");
-  const [dragId, setDragId] = useState(null);
-  const [dragOverCol, setDragOverCol] = useState(null);
-  const [verArquivadas, setVerArquivadas] = useState(false);
-
-  const salvar = form => {
-    setTarefas(ts => form.id ? ts.map(t=>t.id===form.id?form:t) : [...ts, {...form, id:Date.now()}]);
-    setEditando(null); setNovo(false);
-  };
-  const nomeResp = id => equipe.find(m=>m.id===id)?.nome || "—";
-  const nomeCliente = id => clientes.find(c=>c.id===id)?.nome || "—";
-  const numProc = id => processos.find(p=>p.id===id)?.numero || "";
-
-  const moverStatus = (id, novoStatus) => {
-    setTarefas(ts => ts.map(t => t.id===id ? {...t, status:novoStatus} : t));
-  };
-  const arquivarTarefa = id => {
-    setTarefas(ts => ts.map(t => t.id===id ? {...t, arquivada:true} : t));
-  };
-  const desarquivarTarefa = id => {
-    setTarefas(ts => ts.map(t => t.id===id ? {...t, arquivada:false} : t));
-  };
-  const reabrirTarefa = id => {
-    setTarefas(ts => ts.map(t => t.id===id ? {...t, status:"pendente", arquivada:false} : t));
-  };
-
-  const colunas = [
-    {key:"pendente", label:"Pendente"},
-    {key:"em_andamento", label:"Em Andamento"},
-    {key:"concluido", label:"Concluído"},
-  ];
-  const baseLista = filtroResp ? tarefas.filter(t=>t.responsavelId===parseInt(filtroResp)) : tarefas;
-  const lista = baseLista.filter(t=>!t.arquivada);
-  const arquivadas = baseLista.filter(t=>t.arquivada);
-
-  return (
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16}}>
-        <div>
-          <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Tarefas e Atividades</h1>
-          <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{lista.length} tarefa(s) ativa(s) — arraste os cards para mudar o status</p>
-        </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <select value={filtroResp} onChange={e=>setFiltroResp(e.target.value)} style={{...inp,padding:"7px 10px",width:170}}>
-            <option value="">Todos responsáveis</option>
-            {equipe.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
-          </select>
-          <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Nova tarefa</button>
-        </div>
-      </div>
-
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
-        {colunas.map(col=>{
-          const itens = lista.filter(t=>t.status===col.key);
-          const cfg = STATUS_TAREFA_CFG[col.key];
-          const isOver = dragOverCol === col.key;
-          return (
-            <div
-              key={col.key}
-              onDragOver={e=>{ e.preventDefault(); setDragOverCol(col.key); }}
-              onDragLeave={()=>setDragOverCol(c=>c===col.key?null:c)}
-              onDrop={e=>{
-                e.preventDefault();
-                if(dragId!=null) moverStatus(dragId, col.key);
-                setDragId(null); setDragOverCol(null);
-              }}
-              style={{
-                background: isOver ? "var(--accent-light)" : "var(--bg2)",
-                borderRadius:10, padding:"12px",
-                border: isOver ? "2px dashed var(--accent)" : "2px dashed transparent",
-                transition:"background .15s, border-color .15s",
-                minHeight:120,
-              }}
-            >
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:cfg.dot}}/>
-                <span style={{fontSize:12,fontWeight:700,color:"var(--text1)",textTransform:"uppercase",letterSpacing:".4px"}}>{col.label}</span>
-                <span style={{fontSize:11,color:"var(--text2)",marginLeft:"auto"}}>{itens.length}</span>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {itens.map(t=>{
-                  const pCfg = PRIORIDADE_CFG[t.prioridade];
-                  const venceLogo = t.prazo && diasRest(t.prazo) <= 3 && t.status !== "concluido";
-                  return (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={()=>setDragId(t.id)}
-                      onDragEnd={()=>{setDragId(null);setDragOverCol(null);}}
-                      onClick={()=>setEditando(t)}
-                      style={{background:"#fff",borderRadius:7,padding:"10px 12px",cursor:"grab",border:"1px solid var(--border1)",borderLeft:`3px solid ${pCfg.color}`,opacity:dragId===t.id?.4:1}}
-                    >
-                      <p style={{fontSize:12.5,fontWeight:600,margin:"0 0 6px"}}>{t.titulo}</p>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
-                        <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
-                        {t.prazo && <span style={{fontSize:10,color:venceLogo?"var(--red)":"var(--text2)",fontWeight:venceLogo?700:400}}>{fmtData(t.prazo)}</span>}
-                      </div>
-                      {t.clienteId && <p style={{fontSize:10.5,color:"var(--accent)",margin:"0 0 2px"}}>👤 {nomeCliente(t.clienteId)}</p>}
-                      {t.procId && <p style={{fontSize:10,fontFamily:"monospace",color:"var(--text2)",margin:"0 0 4px"}}>{numProc(t.procId).slice(0,20)}…</p>}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
-                        <p style={{fontSize:10.5,color:"var(--text2)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>👷 {nomeResp(t.responsavelId)}</p>
-                        <div style={{display:"flex",gap:4,flexShrink:0}}>
-                          {col.key==="concluido" && (
-                            <button onClick={e=>{e.stopPropagation();reabrirTarefa(t.id);}} title="Reabrir tarefa (voltar para pendente)" style={{fontSize:9,padding:"2px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--accent)",fontWeight:600,whiteSpace:"nowrap"}}>↩ Reabrir</button>
-                          )}
-                          <button onClick={e=>{e.stopPropagation();arquivarTarefa(t.id);}} title="Arquivar tarefa" style={{fontSize:9,padding:"2px 7px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>📦</button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {itens.length===0 && <p style={{fontSize:11,color:"var(--text3)",textAlign:"center",padding:"10px 0"}}>Arraste um card aqui</p>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {arquivadas.length>0 && (
-        <div style={{marginTop:18}}>
-          <button onClick={()=>setVerArquivadas(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11.5,color:"var(--text2)",fontWeight:600,padding:0}}>
-            {verArquivadas?"▾":"▸"} {arquivadas.length} tarefa(s) arquivada(s)
-          </button>
-          {verArquivadas && (
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:10}}>
-              {arquivadas.map(t=>(
-                <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontSize:12,padding:"8px 12px",background:"#fff",border:"1px solid var(--border1)",borderRadius:6}}>
-                  <span style={{color:"var(--text2)",textDecoration:"line-through",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.titulo}</span>
-                  <span style={{fontSize:10.5,color:"var(--text3)",whiteSpace:"nowrap"}}>{numProc(t.procId)?.slice(0,18)}{t.procId?"…":""}</span>
-                  <div style={{display:"flex",gap:4,flexShrink:0}}>
-                    <button onClick={()=>reabrirTarefa(t.id)} title="Reabrir (voltar para pendente)" style={{fontSize:9,padding:"3px 8px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--accent)",fontWeight:600,whiteSpace:"nowrap"}}>↩ Reabrir</button>
-                    <button onClick={()=>desarquivarTarefa(t.id)} title="Desarquivar (manter status, tirar do arquivo)" style={{fontSize:9,padding:"3px 8px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>📤 Desarquivar</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {(editando||novo) && <ModalFormTarefa tarefa={editando} equipe={equipe} processos={processos} clientes={clientes} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}}/>}
-    </div>
-  );
-}
-
-// ── Modal Form Compromisso ─────────────────────────────────
-function ModalFormCompromisso({compromisso, equipe, processos, clientes, onSave, onClose}){
-  const e0={titulo:"",tipo:"reuniao_cliente",dataHora:"",procId:"",clienteId:"",responsavelId:"",local:"",confirmado:false,obs:""};
-  const [f,setF]=useState(compromisso||e0);
-  const s=(k,v)=>setF(x=>({...x,[k]:v}));
-  return (
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
-      <div style={{background:"#fff",width:480,maxWidth:"100%",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
-        <p style={{fontSize:15,fontWeight:700,margin:"0 0 18px",color:"var(--navy)"}}>{compromisso?"Editar compromisso":"Novo compromisso"}</p>
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div><span style={lbl}>Título</span><input value={f.titulo} onChange={e=>s("titulo",e.target.value)} style={inp}/></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><span style={lbl}>Tipo</span>
-              <select value={f.tipo} onChange={e=>s("tipo",e.target.value)} style={{...inp,padding:"7px 8px"}}>
-                {Object.entries(TIPO_AGENDA_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-              </select>
-            </div>
-            <div><span style={lbl}>Data e hora</span><input type="datetime-local" value={f.dataHora} onChange={e=>s("dataHora",e.target.value)} style={{...inp,padding:"7px 8px"}}/></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><span style={lbl}>Cliente</span>
-              <select value={f.clienteId} onChange={e=>s("clienteId",e.target.value?parseInt(e.target.value):"")} style={{...inp,padding:"7px 8px"}}>
-                <option value="">—</option>
-                {[...clientes].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
-            <div><span style={lbl}>Processo</span>
-              <select value={f.procId} onChange={e=>s("procId",e.target.value?parseInt(e.target.value):"")} style={{...inp,padding:"7px 8px"}}>
-                <option value="">—</option>
-                {processos.map(p=><option key={p.id} value={p.id}>{p.numero.slice(0,18)}…</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><span style={lbl}>Responsável</span>
-              <select value={f.responsavelId} onChange={e=>s("responsavelId",e.target.value?parseInt(e.target.value):"")} style={{...inp,padding:"7px 8px"}}>
-                <option value="">—</option>
-                {equipe.map(m=><option key={m.id} value={m.id}>{m.nome}</option>)}
-              </select>
-            </div>
-            <div><span style={lbl}>Local</span><input value={f.local} onChange={e=>s("local",e.target.value)} style={inp}/></div>
-          </div>
-          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"var(--text1)",cursor:"pointer"}}>
-            <input type="checkbox" checked={!!f.confirmado} onChange={e=>s("confirmado",e.target.checked)} style={{width:16,height:16}}/>
-            Compromisso confirmado
-          </label>
-        </div>
-        <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end"}}>
-          <button onClick={onClose} style={btnSec}>Cancelar</button>
-          <button onClick={()=>{if(!f.titulo.trim()||!f.dataHora){alert("Informe título e data/hora.");return;}onSave(f);}} style={btnPri}>Salvar</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Página Agenda ──────────────────────────────────────────
 function PaginaAgenda({agenda, setAgenda, equipe, processos, clientes}){
   const [editando, setEditando] = useState(null);
   const [novo, setNovo] = useState(false);
@@ -5341,7 +5070,7 @@ function ModalFormMembro({membro, onSave, onClose}){
 }
 
 // ── Página Equipe ──────────────────────────────────────────
-function PaginaEquipe({equipe, setEquipe, tarefas, agenda}){
+function PaginaEquipe({equipe, setEquipe,  agenda}){
   const [editando, setEditando] = useState(null);
   const [novo, setNovo] = useState(false);
   const [selecionado, setSelecionado] = useState(null);
@@ -6216,7 +5945,6 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
           {pagina==="clientes"&&<PaginaClientes clientes={clientes} setClientes={setClientesSaved} processos={processos} onAbrirProcesso={irParaProcesso} clienteParaAbrir={pedirNovoCliente} onClienteAberto={()=>setPedirNovoCliente(false)}/>}
           {pagina==="financeiro"&&<PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelasSaved} processos={processos}/>}
           {pagina==="agenda"&&<PaginaAgenda agenda={agenda} setAgenda={setAgendaSaved} equipe={equipe} processos={processos} clientes={clientes}/>}
-          {pagina==="tarefas"&&<PaginaTarefas tarefas={tarefas} setTarefas={setTarefasSaved} equipe={equipe} processos={processos} clientes={clientes}/>}
           {pagina==="equipe"&&<PaginaEquipe equipe={equipe} setEquipe={setEquipe} tarefas={tarefas} agenda={agenda}/>}
           {pagina==="relatorios"&&<PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
           {pagina==="importar"&&<PaginaImportacao onImportar={importar} uid={uid} processos={processos} clientes={clientes} setProcessos={setProcessosSaved} setClientes={setClientesSaved}/>}
