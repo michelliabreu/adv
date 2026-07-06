@@ -853,7 +853,7 @@ function ChecklistPanel({processo,onUpdate}){
   );
 }
 // ── Modal Detalhe Processo ────────────────────────────────
-function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddPrazoProcesso,onSaveDriveLink,prazosDoProcesso,onConcluirPrazoProc,onArquivarPrazoProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir,onSaveCampo,onSavePrazoComTarefa}){
+function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir,onSaveCampo,onSavePrazoComTarefa}){
   // Sempre usa a versão mais atual do processo (da lista), para refletir edições na hora
   const p = (processos||[]).find(x=>x.id===pProp.id) || pProp;
   const [tab,setTab]=useState("andamentos");
@@ -1147,14 +1147,14 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
           </div>}
           {tab==="tarefas"&&<div>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
-              <input value={novaTarefaTitulo} onChange={e=>setNovaTarefaTitulo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){onAddPrazoProcesso(p.id,novaTarefaTitulo);setNovaTarefaTitulo("");}}} placeholder="Ex: Elaborar substabelecimento…" style={{...inp,flex:1}}/>
-              <button onClick={()=>{onAddPrazoProcesso(p.id,novaTarefaTitulo);setNovaTarefaTitulo("");}} style={{...btnPri,fontSize:11.5,whiteSpace:"nowrap"}}>+ Criar tarefa</button>
+              <input value={novaTarefaTitulo} onChange={e=>setNovaTarefaTitulo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){onAddTarefaProcesso(p.id,novaTarefaTitulo);setNovaTarefaTitulo("");}}} placeholder="Ex: Elaborar substabelecimento…" style={{...inp,flex:1}}/>
+              <button onClick={()=>{onAddTarefaProcesso(p.id,novaTarefaTitulo);setNovaTarefaTitulo("");}} style={{...btnPri,fontSize:11.5,whiteSpace:"nowrap"}}>+ Criar tarefa</button>
             </div>
             <p style={{fontSize:10.5,color:"var(--text2)",margin:"0 0 14px"}}>A tarefa é criada como <strong>Pendente</strong> no quadro de Tarefas, vinculada a este processo.</p>
 
-            {(prazosDoProcesso||[]).filter(t=>!t.arquivada).length===0
+            {(tarefasDoProcesso||[]).filter(t=>!t.arquivada).length===0
               ? <div style={{fontSize:13,color:"var(--text2)"}}>Nenhuma tarefa ativa para este processo.</div>
-              : (prazosDoProcesso||[]).filter(t=>!t.arquivada).map(t=>{
+              : (tarefasDoProcesso||[]).filter(t=>!t.arquivada).map(t=>{
                   const cfg = STATUS_TAREFA_CFG[t.status];
                   return (
                     <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"1px solid var(--border1)",borderRadius:6,padding:"9px 12px",marginBottom:8}}>
@@ -1163,18 +1163,18 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
                         <Pill bg={cfg.bg} color={cfg.color} label={cfg.label} sm/>
                       </div>
                       {t.status!=="concluido"
-                        ? <button onClick={()=>onConcluirPrazoProc(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",whiteSpace:"nowrap"}}>✓ Concluir</button>
-                        : <button onClick={()=>onArquivarPrazoProc(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",whiteSpace:"nowrap",color:"var(--text2)"}}>📦 Arquivar</button>
+                        ? <button onClick={()=>onConcluirTarefaProc(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",whiteSpace:"nowrap"}}>✓ Concluir</button>
+                        : <button onClick={()=>onArquivarTarefaProc(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",whiteSpace:"nowrap",color:"var(--text2)"}}>📦 Arquivar</button>
                       }
                     </div>
                   );
                 })
             }
 
-            {(prazosDoProcesso||[]).filter(t=>t.arquivada).length>0 && (
+            {(tarefasDoProcesso||[]).filter(t=>t.arquivada).length>0 && (
               <div style={{marginTop:16}}>
                 <p style={{fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",color:"var(--text2)",margin:"0 0 8px"}}>Concluídas e arquivadas</p>
-                {(prazosDoProcesso||[]).filter(t=>t.arquivada).map(t=>(
+                {(tarefasDoProcesso||[]).filter(t=>t.arquivada).map(t=>(
                   <div key={t.id} style={{fontSize:12,color:"var(--text2)",padding:"6px 0",borderBottom:"1px solid var(--border1)",textDecoration:"line-through"}}>{t.titulo}</div>
                 ))}
               </div>
@@ -2103,7 +2103,7 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
   );
 }
 
-function PaginaDashboard({processos, parcelas, clientes, prazos, agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes}){
+function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes}){
   const tarefasPendentes = (tarefas||[]).filter(t=>t.status!=="concluido");
   const tarefasAtrasadas = tarefasPendentes.filter(t=>t.prazo&&diasRest(t.prazo)<0);
   const hojeStr = hoje.toISOString().slice(0,10);
@@ -2407,7 +2407,7 @@ function ModalAcaoLote({tipo, qtd, clientes, classificacoes, onAplicar, onClose}
   );
 }
 
-function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setMapas,onNovoCliente,abrirProcessoId,onProcessoAberto,tarefas,setPrazos,setAgenda,setParcelas,classificacoesCustom,setClassificacoesCustom}){
+function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setMapas,onNovoCliente,abrirProcessoId,onProcessoAberto,tarefas,setTarefas,setAgenda,setParcelas,classificacoesCustom,setClassificacoesCustom}){
   const [aba,setAba]=useState("em_andamento");
   const [busca,setBusca]=useState("");
   const [filtrosAbertos,setFiltrosAbertos]=useState(false);
@@ -2535,11 +2535,11 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   };
 
   const addTarefaProcesso = (procId, titulo) => {
-    if(!setPrazos) return;
-    // Permite salvar mesmo incompleto — só checa se tem setPrazos
+    if(!setTarefas) return;
+    // Permite salvar mesmo incompleto — só checa se tem setTarefas
     if(!titulo || !titulo.trim()) return; // Apenas titulo é obrigatório (não dá pra ter tarefa vazia)
     
-    setPrazos(ts=>[...ts, {
+    setTarefas(ts=>[...ts, {
       id: Date.now(),
       titulo: titulo.trim(),
       responsavelId: "",
@@ -2572,7 +2572,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     setProcessos(ps => ps.map(x => x.id === procId ? {...x, prazo: novoPrazo} : x));
     setSelected(s => s && s.id === procId ? {...s, prazo: novoPrazo} : s);
     
-    if (!setPrazos) return;
+    if (!setTarefas) return;
     
     const proc = processos.find(p => p.id === procId);
     if (!proc) return; // Valida que processo existe
@@ -2580,7 +2580,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     const numero = proc.numero || "";
     const tituloTarefa = `Cumprir prazo — proc. ${numero}`;
 
-    setPrazos(ts => {
+    setTarefas(ts => {
       if (!Array.isArray(ts)) return ts;
       
       // CORREÇÃO: Buscar a tarefa NO ts ATUAL, não em tarefas antigas
@@ -2622,13 +2622,13 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     setProcessos(ps => ps.map(x => x.id === procId ? {...x, prazo: dataPrazo} : x));
     setSelected(s => s && s.id === procId ? {...s, prazo: dataPrazo} : s);
     
-    if (!setPrazos) return;
+    if (!setTarefas) return;
     
     const proc = processos.find(p => p.id === procId);
     if (!proc) return;
     
     // 2. Cria tarefa com nome customizado pela usuária
-    setPrazos(ts => {
+    setTarefas(ts => {
       if (!Array.isArray(ts)) return ts;
       const existente = ts.find(t => ehTarefaDePrazo(t) && t.procId === procId && t.status !== "concluido" && !t.arquivada);
       
@@ -2662,7 +2662,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
 
   // Concluir tarefa de prazo limpa o prazo do processo
   const concluirTarefaProc = tarefaId => {
-    if (!setPrazos || !tarefaId) return;
+    if (!setTarefas || !tarefaId) return;
     const tarefa = (tarefas || []).find(t => t.id === tarefaId);
     
     if (tarefa && ehTarefaDePrazo(tarefa) && tarefa.procId) {
@@ -2671,11 +2671,11 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       setSelected(s => s && s.id === tarefa.procId ? {...s, prazo: null} : s);
     }
     
-    setPrazos(ts => ts.map(t => t.id === tarefaId ? {...t, status: "concluido"} : t));
+    setTarefas(ts => ts.map(t => t.id === tarefaId ? {...t, status: "concluido"} : t));
   };
   const arquivarTarefaProc = tarefaId => {
-    if(!setPrazos) return;
-    setPrazos(ts=>ts.map(t=>t.id===tarefaId?{...t,arquivada:true}:t));
+    if(!setTarefas) return;
+    setTarefas(ts=>ts.map(t=>t.id===tarefaId?{...t,arquivada:true}:t));
   };
 
   const saveDriveLink = (clienteId, link) => {
@@ -3087,7 +3087,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       </div>
       <p style={{fontSize:11,color:"var(--text2)",marginTop:8,textAlign:"right"}}>{lista.length} registro(s)</p>
       {acaoLote&&<ModalAcaoLote tipo={acaoLote} qtd={selecionados.size} clientes={clientes} classificacoes={[...CLASSIFICACOES_VALIDAS,...(classificacoesCustom||[])]} onAplicar={aplicarLote} onClose={()=>setAcaoLote(null)}/>}
-      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} clientes={clientes} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddPrazoProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} prazosDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirPrazoProc={concluirTarefaProc} onArquivarPrazoProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia} onExcluir={excluirProcesso} onSaveCampo={(id,campo,valor)=>{setProcessos(ps=>ps.map(x=>x.id===id?{...x,[campo]:valor}:x));setSelected(s=>s&&s.id===id?{...s,[campo]:valor}:s);}} onSavePrazoComTarefa={salvarPrazoComTarefa}/>}
+      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} clientes={clientes} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddTarefaProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} tarefasDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirTarefaProc={concluirTarefaProc} onArquivarTarefaProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia} onExcluir={excluirProcesso} onSaveCampo={(id,campo,valor)=>{setProcessos(ps=>ps.map(x=>x.id===id?{...x,[campo]:valor}:x));setSelected(s=>s&&s.id===id?{...s,[campo]:valor}:s);}} onSavePrazoComTarefa={salvarPrazoComTarefa}/>}
       {(editando||novo)&&<ModalFormProc processo={editando} clientes={clientes} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}} onNovoCliente={onNovoCliente} classificacoesCustom={classificacoesCustom||[]} onNovaClassificacao={nova=>{ if(setClassificacoesCustom) setClassificacoesCustom(cs=>cs.includes(nova)?cs:[...cs,nova]); }}/>}
       {mapaProc&&<ModalMapa proc={mapaProc} mapaData={mapas[mapaProc.id]||defaultMap()} onChange={data=>setMapas(m=>({...m,[mapaProc.id]:data}))} onClose={()=>setMapaProc(null)}/>}
       {analisandoPrazo&&<ModalConfirmarPrazo proc={analisandoPrazo} sugestao={sugestaoPrazo} dataAndamento={[...(analisandoPrazo.andamentos||[])].sort((a,b)=>b.data.localeCompare(a.data))[0]?.data||""} onConfirm={salvarPrazo} onClose={()=>{setAnalisandoPrazo(null);setSugestaoPrazo(null);}}/>}
@@ -3536,7 +3536,7 @@ function ModalCriarTarefaIntimacao({intimacao, equipe, onConfirm, onClose}){
   );
 }
 
-function PaginaIntimacoes({processos, clientes, equipe, setProcessos, setPrazos, publicacoes, setPublicacoes}){
+function PaginaIntimacoes({processos, clientes, equipe, setProcessos, setTarefas, publicacoes, setPublicacoes}){
   const [numeroOab, setNumeroOab] = useState("155134");
   const [ufOab, setUfOab] = useState("RJ");
   const [textoColado, setTextoColado] = useState("");
@@ -3642,7 +3642,7 @@ Se o texto colado contiver apenas uma publicação, retorne um array com um úni
   const confirmarTarefa = (dados) => {
     if(!criandoTarefaPara) return;
     const proc = tentarAcharProcesso(criandoTarefaPara) || (vinculando[criandoTarefaPara._localId] ? processos.find(p=>p.id===vinculando[criandoTarefaPara._localId]) : null);
-    setPrazos(ts=>[...ts, {
+    setTarefas(ts=>[...ts, {
       id: Date.now(),
       titulo: dados.titulo,
       responsavelId: dados.responsavelId,
@@ -3951,7 +3951,7 @@ function ModalDetalheExtrajudicial({demanda, cliente, tarefasDaDemanda, onClose,
   );
 }
 
-function PaginaExtrajudicial({demandas, setDemandas, clientes, prazos, setPrazos, tiposCustom, setTiposCustom, onNovoCliente}){
+function PaginaExtrajudicial({demandas, setDemandas, clientes, tarefas, setTarefas, tiposCustom, setTiposCustom, onNovoCliente}){
   const [busca,setBusca] = useState("");
   const [filtroStatus,setFiltroStatus] = useState("todos");
   const [novo,setNovo] = useState(false);
@@ -3977,13 +3977,13 @@ function PaginaExtrajudicial({demandas, setDemandas, clientes, prazos, setPrazos
   const addTarefa = (demandaId, titulo) => {
     if(!titulo.trim()) return;
     const demanda = demandas.find(d=>d.id===demandaId);
-    setPrazos(ts=>[...ts, {
+    setTarefas(ts=>[...ts, {
       id: Date.now(), titulo: titulo.trim(), responsavelId:"", procId:"", demandaId,
       clienteId: demanda?.clienteId||"", status:"pendente", prioridade:"media", prazo:"", desc:"", arquivada:false,
     }]);
   };
-  const concluirTarefa = id => setPrazos(ts=>ts.map(t=>t.id===id?{...t,status:"concluido"}:t));
-  const arquivarTarefa = id => setPrazos(ts=>ts.map(t=>t.id===id?{...t,arquivada:true}:t));
+  const concluirTarefa = id => setTarefas(ts=>ts.map(t=>t.id===id?{...t,status:"concluido"}:t));
+  const arquivarTarefa = id => setTarefas(ts=>ts.map(t=>t.id===id?{...t,arquivada:true}:t));
   const novoTipo = (tipo) => { if(!tiposCustom.includes(tipo)) setTiposCustom(tc=>[...tc,tipo]); };
 
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
@@ -4277,7 +4277,7 @@ function ModalDocumentosGerados({pessoa, dados, onClose}){
   );
 }
 
-function PaginaFichaAtendimento({clientes, setClientes, processos, setProcessos, demandas, setDemandas, prazos, setPrazos, equipe, onConcluido}){
+function PaginaFichaAtendimento({clientes, setClientes, processos, setProcessos, demandas, setDemandas, tarefas, setTarefas, equipe, onConcluido}){
   const [cliente,setCliente] = useState(pessoaVazia());
   const [clienteExistenteId,setClienteExistenteId] = useState("");
   const [adversa,setAdversa] = useState(pessoaVazia());
@@ -4351,7 +4351,7 @@ function PaginaFichaAtendimento({clientes, setClientes, processos, setProcessos,
     // 3. Cria a tarefa inicial
     const tituloTarefa = tarefaSugerida==="Outra (especificar)" ? tarefaCustom : tarefaSugerida;
     if(tituloTarefa && tituloTarefa.trim()){
-      setPrazos(ts=>[...ts, {
+      setTarefas(ts=>[...ts, {
         id: Date.now()+2, titulo: tituloTarefa.trim(),
         responsavelId: tarefaResponsavel?parseInt(tarefaResponsavel):"",
         procId: novoProcessoId || "", demandaId: novaDemandaId || "",
@@ -4897,7 +4897,7 @@ function ModalFormTarefa({tarefa, equipe, processos, clientes, onSave, onClose})
 }
 
 // ── Página Tarefas ─────────────────────────────────────────
-function PaginaPrazos({tarefas, setPrazos, equipe, processos, clientes}){
+function PaginaTarefas({tarefas, setTarefas, equipe, processos, clientes}){
   const [editando, setEditando] = useState(null);
   const [novo, setNovo] = useState(false);
   const [filtroResp, setFiltroResp] = useState("");
@@ -4906,7 +4906,7 @@ function PaginaPrazos({tarefas, setPrazos, equipe, processos, clientes}){
   const [verArquivadas, setVerArquivadas] = useState(false);
 
   const salvar = form => {
-    setPrazos(ts => form.id ? ts.map(t=>t.id===form.id?form:t) : [...ts, {...form, id:Date.now()}]);
+    setTarefas(ts => form.id ? ts.map(t=>t.id===form.id?form:t) : [...ts, {...form, id:Date.now()}]);
     setEditando(null); setNovo(false);
   };
   const nomeResp = id => equipe.find(m=>m.id===id)?.nome || "—";
@@ -4914,16 +4914,16 @@ function PaginaPrazos({tarefas, setPrazos, equipe, processos, clientes}){
   const numProc = id => processos.find(p=>p.id===id)?.numero || "";
 
   const moverStatus = (id, novoStatus) => {
-    setPrazos(ts => ts.map(t => t.id===id ? {...t, status:novoStatus} : t));
+    setTarefas(ts => ts.map(t => t.id===id ? {...t, status:novoStatus} : t));
   };
   const arquivarTarefa = id => {
-    setPrazos(ts => ts.map(t => t.id===id ? {...t, arquivada:true} : t));
+    setTarefas(ts => ts.map(t => t.id===id ? {...t, arquivada:true} : t));
   };
   const desarquivarTarefa = id => {
-    setPrazos(ts => ts.map(t => t.id===id ? {...t, arquivada:false} : t));
+    setTarefas(ts => ts.map(t => t.id===id ? {...t, arquivada:false} : t));
   };
   const reabrirTarefa = id => {
-    setPrazos(ts => ts.map(t => t.id===id ? {...t, status:"pendente", arquivada:false} : t));
+    setTarefas(ts => ts.map(t => t.id===id ? {...t, status:"pendente", arquivada:false} : t));
   };
 
   const colunas = [
@@ -5341,7 +5341,7 @@ function ModalFormMembro({membro, onSave, onClose}){
 }
 
 // ── Página Equipe ──────────────────────────────────────────
-function PaginaEquipe({equipe, setEquipe, prazos, agenda}){
+function PaginaEquipe({equipe, setEquipe, tarefas, agenda}){
   const [editando, setEditando] = useState(null);
   const [novo, setNovo] = useState(false);
   const [selecionado, setSelecionado] = useState(null);
@@ -5846,7 +5846,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const [abrirProcessoId,setAbrirProcessoId]=useState(null);
   const [pedirNovoCliente,setPedirNovoCliente]=useState(false);
   const [equipe,setEquipe]=useState(EQUIPE0);
-  const [prazos,setPrazos]=useState([]);
+  const [tarefas,setTarefas]=useState([]);
   const [publicacoes,setPublicacoes]=useState([]);
   const [agenda,setAgenda]=useState([]);
   const [demandas,setDemandas]=useState([]);
@@ -5935,7 +5935,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
         }
 
         if(parcRows) setParcelas(parcRows);
-        if(tarefRows) setPrazos(tarefRows.map(t=>({...t})));
+        if(tarefRows) setTarefas(tarefRows.map(t=>({...t})));
         if(agRows) setAgenda(agRows.map(a=>({...a})));
         if(demRows) setDemandas(demRows.map(d=>({...d})));
         if(cfg && cfg.length>0){
@@ -6063,7 +6063,7 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
   const setProcessosSaved = React.useCallback(v=>{ setProcessos(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("processos",n); return n; }); },[autoSave]);
   const setClientesSaved = React.useCallback(v=>{ setClientes(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("clientes",n); return n; }); },[autoSave]);
   const setParcelasSaved = React.useCallback(v=>{ setParcelas(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("parcelas",n); return n; }); },[autoSave]);
-  const setPrazosSaved = React.useCallback(v=>{ setPrazos(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("tarefas",n); return n; }); },[autoSave]);
+  const setTarefasSaved = React.useCallback(v=>{ setTarefas(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("tarefas",n); return n; }); },[autoSave]);
   const setAgendaSaved = React.useCallback(v=>{ setAgenda(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("agenda",n); return n; }); },[autoSave]);
   const setDemandasSaved = React.useCallback(v=>{ setDemandas(prev=>{ const n=typeof v==="function"?v(prev):v; autoSave("demandas",n); return n; }); },[autoSave]);
 
@@ -6209,14 +6209,14 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
             </div>
           )}
           {pagina==="dashboard"&&<PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} agenda={agenda} equipe={equipe} onAbrirProcesso={irParaProcesso} onIrPara={setPagina} setProcessos={setProcessosSaved} setClientes={setClientesSaved}/>}
-          {pagina==="ficha"&&<PaginaFichaAtendimento clientes={clientes} setClientes={setClientesSaved} processos={processos} setProcessos={setProcessosSaved} demandas={demandas} setDemandas={setDemandasSaved} tarefas={tarefas} setPrazos={setPrazosSaved} equipe={equipe} onConcluido={aoConcluirFicha}/>}
-          {pagina==="extrajudicial"&&<PaginaExtrajudicial demandas={demandas} setDemandas={setDemandasSaved} clientes={clientes} tarefas={tarefas} setPrazos={setPrazosSaved} tiposCustom={tiposExtraCustom} setTiposCustom={setTiposExtraCustom} onNovoCliente={()=>setPedirNovoCliente(true)}/>}
-          {pagina==="processos"&&<PaginaProcessos processos={processos} setProcessos={setProcessosSaved} clientes={clientes} setClientes={setClientesSaved} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>setPedirNovoCliente(true)} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setPrazos={setPrazosSaved} setAgenda={setAgendaSaved} setParcelas={setParcelasSaved} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom}/>}
-          {pagina==="intimacoes"&&<PaginaIntimacoes processos={processos} clientes={clientes} equipe={equipe} setProcessos={setProcessosSaved} setPrazos={setPrazosSaved} publicacoes={publicacoes} setPublicacoes={setPublicacoes}/>}
+          {pagina==="ficha"&&<PaginaFichaAtendimento clientes={clientes} setClientes={setClientesSaved} processos={processos} setProcessos={setProcessosSaved} demandas={demandas} setDemandas={setDemandasSaved} tarefas={tarefas} setTarefas={setTarefasSaved} equipe={equipe} onConcluido={aoConcluirFicha}/>}
+          {pagina==="extrajudicial"&&<PaginaExtrajudicial demandas={demandas} setDemandas={setDemandasSaved} clientes={clientes} tarefas={tarefas} setTarefas={setTarefasSaved} tiposCustom={tiposExtraCustom} setTiposCustom={setTiposExtraCustom} onNovoCliente={()=>setPedirNovoCliente(true)}/>}
+          {pagina==="processos"&&<PaginaProcessos processos={processos} setProcessos={setProcessosSaved} clientes={clientes} setClientes={setClientesSaved} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>setPedirNovoCliente(true)} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefasSaved} setAgenda={setAgendaSaved} setParcelas={setParcelasSaved} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom}/>}
+          {pagina==="intimacoes"&&<PaginaIntimacoes processos={processos} clientes={clientes} equipe={equipe} setProcessos={setProcessosSaved} setTarefas={setTarefasSaved} publicacoes={publicacoes} setPublicacoes={setPublicacoes}/>}
           {pagina==="clientes"&&<PaginaClientes clientes={clientes} setClientes={setClientesSaved} processos={processos} onAbrirProcesso={irParaProcesso} clienteParaAbrir={pedirNovoCliente} onClienteAberto={()=>setPedirNovoCliente(false)}/>}
           {pagina==="financeiro"&&<PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelasSaved} processos={processos}/>}
           {pagina==="agenda"&&<PaginaAgenda agenda={agenda} setAgenda={setAgendaSaved} equipe={equipe} processos={processos} clientes={clientes}/>}
-          {pagina==="tarefas"&&<PaginaPrazos tarefas={tarefas} setPrazos={setPrazosSaved} equipe={equipe} processos={processos} clientes={clientes}/>}
+          {pagina==="tarefas"&&<PaginaTarefas tarefas={tarefas} setTarefas={setTarefasSaved} equipe={equipe} processos={processos} clientes={clientes}/>}
           {pagina==="equipe"&&<PaginaEquipe equipe={equipe} setEquipe={setEquipe} tarefas={tarefas} agenda={agenda}/>}
           {pagina==="relatorios"&&<PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
           {pagina==="importar"&&<PaginaImportacao onImportar={importar} uid={uid} processos={processos} clientes={clientes} setProcessos={setProcessosSaved} setClientes={setClientesSaved}/>}
