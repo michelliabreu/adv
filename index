@@ -2523,14 +2523,20 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   };
 
   const addTarefaProcesso = (procId, titulo) => {
-    if(!setTarefas || !titulo.trim()) return;
+    // Validações obrigatórias
+    if(!setTarefas) return;
+    if(!procId) { alert("❌ Processo não definido"); return; }
+    if(!titulo || !titulo.trim()) { alert("❌ Título da tarefa é obrigatório"); return; }
+    
     const proc = processos.find(p=>p.id===procId);
+    if(!proc) { alert("❌ Processo não existe"); return; }
+    
     setTarefas(ts=>[...ts, {
       id: Date.now(),
       titulo: titulo.trim(),
       responsavelId: "",
       procId: procId,
-      clienteId: proc?.clienteId || "",
+      clienteId: proc.clienteId || "",
       status: "pendente",
       prioridade: "media",
       prazo: "",
@@ -5922,10 +5928,15 @@ function AppPrincipal({sessao, setSincStatus, sincStatus}){
     parcelas: ["id","procId","cliente","totalContrato","parcela","totalParcelas","valor","vencimento","pago"],
     tarefas: ["id","titulo","responsavelId","procId","demandaId","clienteId","status","prioridade","prazo","desc","arquivada"],
     agenda: ["id","titulo","tipo","dataHora","procId","clienteId","responsavelId","local","confirmado","obs"],
-    demandas: ["id","clienteId","tipo","descricao","status","responsavel","prazo","valorCausa","obs"],
+    demandas: ["id","user_id","clienteId","tipo","descricao","status","responsavel","prazo","valorCausa","obs"],
   };
   const JSON_FIELDS = ["andamentos","partes","checklist","exitos","debito","documentos","audiencia","vinculo"];
   const autoSave = React.useCallback((tabela, dados, delay=1200) => {
+    // VALIDAÇÃO CRÍTICA: Não salva sem user_id
+    if (!uid) {
+      console.warn(`Salvamento bloqueado: uid não definido. Usuário pode não estar autenticado.`);
+      return;
+    }
     if(carregandoRef.current) return;
     if(!Array.isArray(dados)) return;
     clearTimeout(saveTimer.current[tabela]);
