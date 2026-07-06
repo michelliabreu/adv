@@ -873,6 +873,8 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
   const [enviandoCobranca,setEnviandoCobranca]=useState(null);
   const [editandoAudiencia,setEditandoAudiencia]=useState(false);
   const [editandoPrazo,setEditandoPrazo]=useState(false);
+  const [mostrarModalTarefaPrazo,setMostrarModalTarefaPrazo]=useState(null); // {procId, dataPrazo}
+  const [nomeTarefaPrazo,setNomeTarefaPrazo]=useState("");
   const [prazoForm,setPrazoForm]=useState(p.prazo||"");
   const [editandoPartes,setEditandoPartes]=useState(false);
   const [partesForm,setPartesForm]=useState([]);
@@ -988,9 +990,19 @@ function ModalDetalhe({p:pProp,cliente,clientes,processos,onClose,onEdit,onCheck
               <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
                 <input type="date" autoFocus value={prazoForm||""} onChange={e=>setPrazoForm(e.target.value)} style={{...inp,padding:"4px 7px",fontSize:12,flex:1,minWidth:130}}/>
                 <button onClick={()=>{
-                  if(onSavePrazoComTarefa) onSavePrazoComTarefa(p.id, prazoForm||null);
-                  else onSaveCampo(p.id,"prazo",prazoForm||null);
-                  setEditandoPrazo(false);
+                  if(prazoForm){
+                    // Pede o nome da tarefa que será criada
+                    const nomeTarefa = prompt("Qual é a tarefa para este prazo?\n\nEx: Protocolar petição, Aguardar resposta, Juntar documentos...");
+                    if(nomeTarefa) {
+                      salvarPrazoComTarefaNomeada(p.id, prazoForm, nomeTarefa);
+                      setEditandoPrazo(false);
+                    }
+                  } else {
+                    // Sem prazo, só salva
+                    if(onSavePrazoComTarefa) onSavePrazoComTarefa(p.id, null);
+                    else onSaveCampo(p.id,"prazo",null);
+                    setEditandoPrazo(false);
+                  }
                 }} style={{...btnPri,fontSize:10,padding:"4px 9px"}}>OK</button>
                 <button onClick={()=>{setPrazoForm("");onSaveCampo(p.id,"prazo",null);setEditandoPrazo(false);}} title="Deixar sem prazo" style={{...btnSec,fontSize:10,padding:"4px 8px"}}>Sem prazo</button>
                 <button onClick={()=>setEditandoPrazo(false)} style={{...btnSec,fontSize:10,padding:"4px 8px"}}>Cancelar</button>
@@ -2599,6 +2611,42 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
         }
         return ts;
       }
+    });
+  };
+
+  // Salva prazo e cria tarefa com NOME CUSTOMIZADO pela usuária
+  const salvarPrazoComTarefaNomeada = (procId, dataPrazo, nomeTarefa) => {
+    if (!procId || !dataPrazo || !nomeTarefa.trim()) return;
+    
+    // 1. Atualiza prazo no processo
+    setProcessos(ps => ps.map(x => x.id === procId ? {...x, prazo: dataPrazo} : x));
+    setSelected(s => s && s.id === procId ? {...s, prazo: dataPrazo} : s);
+    
+    if (!setTarefas) return;
+    
+    const proc = processos.find(p => p.id === procId);
+    if (!proc) return;
+    
+    // 2. Cria tarefa com nome customizado pela usuária
+    setTarefas(ts => {
+      if (!Array.isArray(ts)) return ts;
+      const existente = ts.find(t => ehTarefaDePrazo(t) && t.procId === procId && t.status !== "concluido" && !t.arquivada);
+      
+      if (existente) {
+        return ts.map(t => t.id === existente.id ? {...t, prazo: dataPrazo, titulo: nomeTarefa.trim()} : t);
+      }
+      return [...ts, {
+        id: Date.now() + Math.floor(Math.random() * 10000),
+        titulo: nomeTarefa.trim(),
+        responsavelId: "",
+        procId: procId,
+        clienteId: proc.clienteId || "",
+        status: "pendente",
+        prioridade: "alta",
+        prazo: dataPrazo,
+        desc: "Tarefa vinculada ao prazo do processo.",
+        arquivada: false,
+      }];
     });
   };
 
