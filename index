@@ -90,6 +90,14 @@
     const SUPABASE_KEY = 'sb_publishable_EMQ8cp_3Zx84qDmXwNLC8A_YGkF-K_T';
     const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    // Prazos e Tarefas são tratados como o mesmo conceito no sistema (Problema 4).
+    // O nome da tabela no Supabase continua "tarefas" por compatibilidade com os dados
+    // já salvos, mas em toda a interface e no código isso é chamado de "Prazo".
+    // Se um dia quiser renomear a tabela em si, basta rodar no SQL Editor do Supabase:
+    //   ALTER TABLE tarefas RENAME TO prazos;
+    // e então trocar o valor abaixo para 'prazos'.
+    const TABELA_PRAZOS = 'tarefas';
+
     // Dados iniciais
     const PROCS0 = [
       {id:1,numero:"0001/2024",sistema:"JEC",tipo:"Cobrança",assunto:"Débito pessoal",autor:"Caixa",reu:"Tony Edson",vara:"JEC",responsavel:"Michelli",clienteId:1,status:"ativo",obs:"Primeira instância",arquivado:false},
@@ -136,6 +144,17 @@
       const [uid, setUid] = useState(null);
       const [msg, setMsg] = useState('');
 
+      // Usado para navegação cruzada entre Processos <-> Prazos (Problema 3)
+      const [focoProcesso, setFocoProcesso] = useState(null);
+      const irParaPrazosDoProcesso = (procId) => {
+        setFocoProcesso(procId);
+        setPagina('prazos');
+      };
+      const irParaProcesso = (procId) => {
+        setFocoProcesso(procId);
+        setPagina('processos');
+      };
+
       // Autenticação
       useEffect(() => {
         sb.auth.getSession().then(({data:{session}}) => {
@@ -152,7 +171,7 @@
         Promise.all([
           sb.from('processos').select('*').eq('user_id', uid),
           sb.from('clientes').select('*').eq('user_id', uid),
-          sb.from('tarefas').select('*').eq('user_id', uid),
+          sb.from(TABELA_PRAZOS).select('*').eq('user_id', uid),
           sb.from('agenda').select('*').eq('user_id', uid),
         ]).then(([{data:procs}, {data:cli}, {data:tar}, {data:age}]) => {
           setProcessos(procs && procs.length > 0 ? procs : PROCS0.map(p=>({...p,user_id:uid})));
@@ -197,9 +216,9 @@
             
             <div className="content">
               {msg && (msg.includes('✅') ? <div className="success">{msg}</div> : <div className="error">{msg}</div>)}
-              {pagina === 'processos' && <PaginaProcessos processos={processos} clientes={clientes} />}
+              {pagina === 'processos' && <PaginaProcessos processos={processos} clientes={clientes} prazos={prazos} setProcessos={setProcessos} setPrazos={setPrazos} uid={uid} setMsg={setMsg} focoProcesso={focoProcesso} limparFoco={()=>setFocoProcesso(null)} irParaPrazosDoProcesso={irParaPrazosDoProcesso} />}
               {pagina === 'clientes' && <PaginaClientes clientes={clientes} />}
-              {pagina === 'prazos' && <PaginaPrazos prazos={prazos} processos={processos} setPrazos={setPrazos} uid={uid} setMsg={setMsg} />}
+              {pagina === 'prazos' && <PaginaPrazos prazos={prazos} processos={processos} setPrazos={setPrazos} uid={uid} setMsg={setMsg} focoProcesso={focoProcesso} limparFoco={()=>setFocoProcesso(null)} irParaProcesso={irParaProcesso} />}
               {pagina === 'agenda' && <PaginaAgenda agenda={agenda} prazos={prazos} processos={processos} />}
               {pagina === 'equipe' && <PaginaEquipe equipe={equipe} />}
             </div>
@@ -227,7 +246,87 @@
     }
 
     // Página de Processos
-    function PaginaProcessos({processos, clientes}) {
+    function PaginaProcessos({processos, clientes, prazos, setProcessos, setPrazos, uid, setMsg, focoProcesso, limparFoco, irParaPrazosDoProcesso}) {
+      const [expandido, setExpandido] = useState(focoProcesso || null);
+      const [editando, setEditando] = useState(null); // id do processo em edição
+      const [rascunho, setRascunho] = useState({});
+      const [salvando, setSalvando] = useState(false);
+
+      // Quando chega uma navegação vinda da página de Prazos, expande e destaca o processo
+      useEffect(() => {
+        if(focoProcesso) {
+          setExpandido(focoProcesso);
+          const el = document.getElementById(`processo-${focoProcesso}`);
+          if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+          const t = setTimeout(() => limparFoco && limparFoco(), 4000);
+          return () => clearTimeout(t);
+        }
+      }, [focoProcesso]);
+
+      const iniciarEdicao = (p) => {
+        setEditando(p.id);
+        setRascunho({
+          responsavel: p.responsavel || '',
+          status: p.status || 'ativo',
+          obs: p.obs || '',
+          proximoPrazo: p.proximoPrazo || '',
+          prazoTitulo: p.prazoTitulo || '',
+        });
+      };
+
+      const cancelarEdicao = () => { setEditando(null); setRascunho({}); };
+
+      // Problema 2: ao alterar/marcar a data do prazo do processo, gera automaticamente
+      // um Prazo vinculado a esse processo.
+      const salvarProcesso = async(p) => {
+        setSalvando(true);
+        const dadosAtualizados = {
+          responsavel: rascunho.responsavel,
+          status: rascunho.status,
+          obs: rascunho.obs,
+          proximoPrazo: rascunho.proximoPrazo || null,
+          prazoTitulo: rascunho.prazoTitulo || '',
+        };
+
+        const { error } = await sb.from('processos').update(dadosAtualizados).eq('id', p.id);
+        if(error) {
+          setMsg('❌ Erro ao salvar processo: ' + error.message);
+          setSalvando(false);
+          return;
+        }
+
+        setProcessos(processos.map(pr => pr.id === p.id ? {...pr, ...dadosAtualizados} : pr));
+
+        const dataMudou = (p.proximoPrazo || '') !== (rascunho.proximoPrazo || '');
+        if(dataMudou && rascunho.proximoPrazo) {
+          const idPrazo = Date.now();
+          const novoPrazo = {
+            id: idPrazo,
+            user_id: uid,
+            titulo: rascunho.prazoTitulo && rascunho.prazoTitulo.trim() ? rascunho.prazoTitulo.trim() : `Prazo do processo ${p.numero}`,
+            dataVencimento: rascunho.proximoPrazo,
+            procId: p.id,
+            prioridade: 'media',
+            status: 'pendente',
+            obs: 'Gerado automaticamente a partir da data marcada no processo.',
+            arquivada: false,
+          };
+          const { error: errPrazo } = await sb.from(TABELA_PRAZOS).insert([novoPrazo]);
+          if(!errPrazo) {
+            setPrazos([...prazos, novoPrazo]);
+            setMsg('✅ Processo atualizado e prazo criado automaticamente!');
+          } else {
+            setMsg('⚠️ Processo atualizado, mas houve erro ao criar o prazo automático: ' + errPrazo.message);
+          }
+        } else {
+          setMsg('✅ Processo atualizado!');
+        }
+
+        setTimeout(()=>setMsg(''), 4000);
+        setEditando(null);
+        setSalvando(false);
+      };
+
       return (
         <div>
           <table>
@@ -238,18 +337,107 @@
                 <th>Cliente</th>
                 <th>Status</th>
                 <th>Responsável</th>
+                <th>Próximo Prazo</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {processos.filter(p=>!p.arquivado).map(p => (
-                <tr key={p.id}>
-                  <td><strong>{p.numero}</strong></td>
-                  <td>{p.tipo}</td>
-                  <td>{clientes.find(c=>c.id===p.clienteId)?.nome}</td>
-                  <td><span className={`prazo-badge badge-${p.status}`}>{p.status}</span></td>
-                  <td>{p.responsavel}</td>
-                </tr>
-              ))}
+              {processos.filter(p=>!p.arquivado).map(p => {
+                const prazosDoProcesso = prazos.filter(pz => pz.procId === p.id && !pz.arquivada);
+                const emEdicao = editando === p.id;
+                const destacado = focoProcesso === p.id;
+                return (
+                  <React.Fragment key={p.id}>
+                    <tr id={`processo-${p.id}`} style={destacado ? {background:'rgba(31,111,235,0.15)'} : undefined}>
+                      <td><strong>{p.numero}</strong></td>
+                      <td>{p.tipo}</td>
+                      <td>{clientes.find(c=>c.id===p.clienteId)?.nome}</td>
+                      <td><span className={`prazo-badge badge-${p.status}`}>{p.status}</span></td>
+                      <td>{p.responsavel}</td>
+                      <td>{formatarData(p.proximoPrazo)}</td>
+                      <td>
+                        <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+                          <button className="secondary" style={{fontSize:12,padding:'6px 10px'}} onClick={()=>setExpandido(expandido===p.id?null:p.id)}>
+                            {expandido===p.id ? '▲ Ocultar' : `▼ Prazos (${prazosDoProcesso.length})`}
+                          </button>
+                          <button className="secondary" style={{fontSize:12,padding:'6px 10px'}} onClick={()=>iniciarEdicao(p)}>✏️ Editar</button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {emEdicao && (
+                      <tr>
+                        <td colSpan={7}>
+                          <div className="card">
+                            <h3>Editar Processo {p.numero}</h3>
+                            <div className="grid-2">
+                              <div className="form-group">
+                                <label>Responsável</label>
+                                <input value={rascunho.responsavel} onChange={e=>setRascunho({...rascunho, responsavel:e.target.value})} />
+                              </div>
+                              <div className="form-group">
+                                <label>Status</label>
+                                <select value={rascunho.status} onChange={e=>setRascunho({...rascunho, status:e.target.value})}>
+                                  <option value="ativo">Ativo</option>
+                                  <option value="pendente">Pendente</option>
+                                  <option value="concluido">Concluído</option>
+                                </select>
+                              </div>
+                              <div className="form-group">
+                                <label>Próximo Prazo (data)</label>
+                                <input type="date" value={rascunho.proximoPrazo} onChange={e=>setRascunho({...rascunho, proximoPrazo:e.target.value})} />
+                              </div>
+                              <div className="form-group">
+                                <label>Título do Prazo (opcional)</label>
+                                <input value={rascunho.prazoTitulo} onChange={e=>setRascunho({...rascunho, prazoTitulo:e.target.value})} placeholder="Ex: Contestação, Audiência..." />
+                              </div>
+                            </div>
+                            <div className="form-group">
+                              <label>Observações</label>
+                              <textarea value={rascunho.obs} onChange={e=>setRascunho({...rascunho, obs:e.target.value})} style={{minHeight:60}} />
+                            </div>
+                            <div style={{fontSize:12,color:'#8b949e',marginBottom:12}}>
+                              💡 Ao definir ou alterar a data do "Próximo Prazo", um Prazo é criado automaticamente e vinculado a este processo.
+                            </div>
+                            <div style={{display:'flex',gap:8}}>
+                              <button onClick={()=>salvarProcesso(p)} disabled={salvando}>{salvando?'Salvando...':'✅ Salvar'}</button>
+                              <button className="secondary" onClick={cancelarEdicao} disabled={salvando}>Cancelar</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    {expandido === p.id && (
+                      <tr>
+                        <td colSpan={7}>
+                          {prazosDoProcesso.length === 0 ? (
+                            <div className="loading">Nenhum prazo vinculado a este processo ainda.</div>
+                          ) : (
+                            <div>
+                              {prazosDoProcesso.map(pz => (
+                                <div key={pz.id} className="prazo-item">
+                                  <div className="prazo-header">
+                                    <div className="prazo-title">{pz.titulo}</div>
+                                    <span className={`prazo-badge badge-${pz.prioridade}`}>{pz.prioridade}</span>
+                                  </div>
+                                  <div className="prazo-meta">
+                                    <div>📅 Vencimento: <strong>{formatarData(pz.dataVencimento)}</strong></div>
+                                    <span className={`prazo-badge badge-${pz.status}`}>{pz.status}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <button className="secondary" style={{marginTop:8, fontSize:12,padding:'6px 10px'}} onClick={()=>irParaPrazosDoProcesso(p.id)}>
+                            ⏰ Ver na página de Prazos
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
           {processos.length === 0 && <div className="loading">Nenhum processo cadastrado</div>}
@@ -287,61 +475,79 @@
     }
 
     // Página de Prazos (COMPLETA!)
-    function PaginaPrazos({prazos, processos, setPrazos, uid, setMsg}) {
+    function PaginaPrazos({prazos, processos, setPrazos, uid, setMsg, focoProcesso, limparFoco, irParaProcesso}) {
       const [novo, setNovo] = useState({titulo:'',dataVencimento:'',procId:'',prioridade:'media',obs:''});
       const [salvando, setSalvando] = useState(false);
       const [filtroStatus, setFiltroStatus] = useState('pendente');
       const [filtroProc, setFiltroProc] = useState('');
       const [editando, setEditando] = useState(null);
 
+      // Problema 3: quando se vem da página de Processos, filtra por aquele processo
+      // e mostra todos os status (não só pendentes) para a visualização cruzada funcionar bem.
+      useEffect(() => {
+        if(focoProcesso) {
+          setFiltroProc(String(focoProcesso));
+          setFiltroStatus('');
+          const t = setTimeout(()=> limparFoco && limparFoco(), 4000);
+          return () => clearTimeout(t);
+        }
+      }, [focoProcesso]);
+
+      // Problema 1: só o Título é obrigatório. Data e Processo são opcionais,
+      // e valores vazios são enviados como null em vez de gerar erro (ex: NaN em procId).
       const criarPrazo = async() => {
-        if(!novo.titulo || !novo.dataVencimento || !novo.procId) {
-          setMsg('❌ Preencha Título, Data e Processo');
+        if(!novo.titulo || !novo.titulo.trim()) {
+          setMsg('❌ Preencha ao menos o título do prazo.');
           return;
         }
-        
+
         setSalvando(true);
         const id = Date.now();
-        const {error} = await sb.from('tarefas').insert([{
+        const payload = {
           id: id,
           user_id: uid,
-          titulo: novo.titulo,
-          dataVencimento: novo.dataVencimento,
-          procId: parseInt(novo.procId),
-          prioridade: novo.prioridade,
+          titulo: novo.titulo.trim(),
+          dataVencimento: novo.dataVencimento || null,
+          procId: novo.procId ? parseInt(novo.procId) : null,
+          prioridade: novo.prioridade || 'media',
           status: 'pendente',
-          obs: novo.obs,
+          obs: novo.obs || '',
           arquivada: false,
-        }]);
-        
+        };
+        const {error} = await sb.from(TABELA_PRAZOS).insert([payload]);
+
         if(!error) {
-          setPrazos([...prazos, {id,user_id:uid,titulo:novo.titulo,dataVencimento:novo.dataVencimento,procId:parseInt(novo.procId),prioridade:novo.prioridade,status:'pendente',obs:novo.obs,arquivada:false}]);
+          setPrazos([...prazos, payload]);
           setNovo({titulo:'',dataVencimento:'',procId:'',prioridade:'media',obs:''});
           setMsg('✅ Prazo criado com sucesso!');
           setTimeout(()=>setMsg(''),3000);
         } else {
-          setMsg('❌ Erro ao criar prazo');
+          setMsg('❌ Erro ao criar prazo: ' + error.message);
         }
         setSalvando(false);
       };
 
       const atualizarPrazo = async(prazoId, dados) => {
-        const {error} = await sb.from('tarefas').update(dados).eq('id', prazoId);
+        const {error} = await sb.from(TABELA_PRAZOS).update(dados).eq('id', prazoId);
         if(!error) {
           setPrazos(prazos.map(p => p.id === prazoId ? {...p, ...dados} : p));
           setEditando(null);
           setMsg('✅ Prazo atualizado!');
           setTimeout(()=>setMsg(''),3000);
+        } else {
+          setMsg('❌ Erro ao atualizar prazo: ' + error.message);
         }
       };
 
       const deletarPrazo = async(prazoId) => {
         if(!confirm('Tem certeza que deseja deletar este prazo?')) return;
-        const {error} = await sb.from('tarefas').delete().eq('id', prazoId);
+        const {error} = await sb.from(TABELA_PRAZOS).delete().eq('id', prazoId);
         if(!error) {
           setPrazos(prazos.filter(p => p.id !== prazoId));
           setMsg('✅ Prazo deletado!');
           setTimeout(()=>setMsg(''),3000);
+        } else {
+          setMsg('❌ Erro ao deletar prazo: ' + error.message);
         }
       };
 
@@ -406,14 +612,22 @@
             prazosFilmados.map(p => {
               const proc = processos.find(pr => pr.id === p.procId);
               const dias = diasRestantes(p.dataVencimento);
+              const destacado = focoProcesso && p.procId === focoProcesso;
               return (
-                <div key={p.id} className="prazo-item">
+                <div key={p.id} className="prazo-item" style={destacado ? {borderColor:'#1f6feb', boxShadow:'0 0 0 2px rgba(31,111,235,0.3)'} : undefined}>
                   <div className="prazo-header">
                     <div className="prazo-title">{p.titulo}</div>
                     <span className={`prazo-badge badge-${p.prioridade}`}>{p.prioridade}</span>
                   </div>
                   <div className="prazo-meta">
-                    <div>📌 Processo: <strong>{proc?.numero}</strong></div>
+                    <div>
+                      📌 Processo:{' '}
+                      {proc ? (
+                        <strong style={{cursor:'pointer', textDecoration:'underline'}} onClick={()=>irParaProcesso(proc.id)} title="Ver este processo">
+                          {proc.numero}
+                        </strong>
+                      ) : <strong>—</strong>}
+                    </div>
                     <div>📅 Vencimento: <strong>{formatarData(p.dataVencimento)}</strong></div>
                     {dias !== null && <div>⏳ {dias > 0 ? `${dias} dias` : dias === 0 ? 'Vence hoje!' : `${Math.abs(dias)} dias atrasado`}</div>}
                     <span className={`prazo-badge badge-${p.status}`}>{p.status}</span>
