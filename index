@@ -15,36 +15,67 @@
     #root { display: flex; height: 100vh; }
     
     .sidebar { width: 280px; background: #161b22; border-right: 1px solid #30363d; overflow-y: auto; padding: 20px; }
-    .sidebar-item { padding: 12px 16px; margin: 8px 0; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    .sidebar-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+    .sidebar-item { padding: 12px 16px; margin: 8px 0; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
     .sidebar-item:hover { background: #1f6feb; }
     .sidebar-item.active { background: #1f6feb; font-weight: 600; }
+    .sidebar-logout { margin-top: 40px; padding: 12px 16px; background: #da3633; border-radius: 6px; cursor: pointer; text-align: center; font-size: 13px; }
     
     .main { flex: 1; display: flex; flex-direction: column; }
-    .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px; display: flex; justify-content: space-between; align-items: center; }
-    .header h1 { font-size: 20px; }
-    .header button { padding: 8px 16px; background: #da3633; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 24px; font-weight: 700; }
+    .header-info { font-size: 12px; color: #8b949e; }
     
-    .content { flex: 1; overflow-y: auto; padding: 20px; }
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
     
     table { width: 100%; border-collapse: collapse; margin: 20px 0; }
     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #30363d; }
-    th { background: #0d1117; font-weight: 600; }
-    tr:hover { background: #161b22; }
+    th { background: #0d1117; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+    tr:hover { background: rgba(31, 111, 235, 0.05); }
     
-    input, textarea, select { background: #0d1117; color: #e1e8ed; border: 1px solid #30363d; padding: 8px; border-radius: 6px; font-family: inherit; }
-    input:focus, textarea:focus, select:focus { outline: none; border-color: #1f6feb; }
+    input, textarea, select { background: #0d1117; color: #e1e8ed; border: 1px solid #30363d; padding: 10px; border-radius: 6px; font-family: inherit; font-size: 14px; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1); }
     
-    button { padding: 10px 16px; background: #1f6feb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    button { padding: 10px 16px; background: #1f6feb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; }
     button:hover { background: #388bfd; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button.secondary { background: #21262d; }
+    button.secondary:hover { background: #30363d; }
+    button.danger { background: #da3633; }
+    button.danger:hover { background: #f85149; }
     
     .form-group { margin: 16px 0; }
-    .form-group label { display: block; margin-bottom: 4px; font-size: 13px; }
+    .form-group label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #8b949e; }
     
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin: 12px 0; }
+    .card h3 { margin-bottom: 16px; font-size: 16px; }
     
-    .loading { text-align: center; padding: 40px; }
-    .error { color: #da3633; padding: 12px; background: #3d0e0e; border-radius: 6px; margin: 12px 0; }
-    .success { color: #3fb950; padding: 12px; background: #0d3a1a; border-radius: 6px; margin: 12px 0; }
+    .prazo-item { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .prazo-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; }
+    .prazo-title { font-size: 15px; font-weight: 600; }
+    .prazo-meta { display: flex; gap: 20px; font-size: 12px; color: #8b949e; margin-bottom: 12px; }
+    .prazo-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    .badge-alta { background: rgba(248, 81, 73, 0.2); color: #f85149; }
+    .badge-media { background: rgba(255, 183, 3, 0.2); color: #d29922; }
+    .badge-baixa { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+    .badge-pendente { background: rgba(31, 111, 235, 0.2); color: #58a6ff; }
+    .badge-concluido { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+    
+    .prazo-actions { display: flex; gap: 8px; }
+    .prazo-actions button { padding: 6px 12px; font-size: 12px; }
+    
+    .loading { text-align: center; padding: 40px; color: #8b949e; }
+    .error { color: #f85149; padding: 12px; background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); border-radius: 6px; margin: 12px 0; }
+    .success { color: #3fb950; padding: 12px; background: rgba(63, 185, 80, 0.1); border: 1px solid rgba(63, 185, 80, 0.3); border-radius: 6px; margin: 12px 0; }
+    
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+    
+    .filtros { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filtros select { flex: 1; min-width: 150px; }
+    
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; margin-top: 0; }
+    h3 { font-size: 16px; font-weight: 600; margin-bottom: 12px; margin-top: 0; }
   </style>
 </head>
 <body>
@@ -59,7 +90,7 @@
     const SUPABASE_KEY = 'sb_publishable_EMQ8cp_3Zx84qDmXwNLC8A_YGkF-K_T';
     const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // Dados iniciais (53 processos + 35 clientes + 2 equipe)
+    // Dados iniciais
     const PROCS0 = [
       {id:1,numero:"0001/2024",sistema:"JEC",tipo:"Cobrança",assunto:"Débito pessoal",autor:"Caixa",reu:"Tony Edson",vara:"JEC",responsavel:"Michelli",clienteId:1,status:"ativo",obs:"Primeira instância",arquivado:false},
       {id:2,numero:"0002/2024",sistema:"JEC",tipo:"Cobrança",assunto:"Débito pessoal",autor:"Bradesco",reu:"Tony Edson",vara:"JEC",responsavel:"Michelli",clienteId:2,status:"ativo",obs:"",arquivado:false},
@@ -77,6 +108,19 @@
       {id:2,nome:"Bia",cargo:"Assistente Administrativo"},
     ];
 
+    // Funções auxiliares
+    const diasRestantes = (data) => {
+      if(!data) return null;
+      const hoje = new Date().toISOString().slice(0,10);
+      const dias = Math.floor((new Date(data) - new Date(hoje)) / (1000*60*60*24));
+      return dias;
+    };
+
+    const formatarData = (data) => {
+      if(!data) return '—';
+      return new Date(data + 'T00:00').toLocaleDateString('pt-BR');
+    };
+
     // App Principal
     function App() {
       const [sessao, setSessao] = useState(null);
@@ -90,6 +134,7 @@
       const [equipe, setEquipe] = useState(EQUIPE0);
       
       const [uid, setUid] = useState(null);
+      const [msg, setMsg] = useState('');
 
       // Autenticação
       useEffect(() => {
@@ -123,28 +168,39 @@
       return (
         <div id="root-app">
           <div className="sidebar">
-            <h2 style={{marginBottom:20}}>Advocacia</h2>
+            <div className="sidebar-title">Advocacia</div>
             {['processos','clientes','prazos','agenda','equipe'].map(p => (
-              <div key={p} className={`sidebar-item ${pagina===p?'active':''}`} onClick={()=>setPagina(p)}>
-                {p.charAt(0).toUpperCase() + p.slice(1)}
+              <div key={p} className={`sidebar-item ${pagina===p?'active':''}`} onClick={()=>{setPagina(p);setMsg('');}}>
+                {p === 'processos' && '📋 Processos'}
+                {p === 'clientes' && '👤 Clientes'}
+                {p === 'prazos' && '⏰ Prazos'}
+                {p === 'agenda' && '📅 Agenda'}
+                {p === 'equipe' && '🧑‍💼 Equipe'}
               </div>
             ))}
-            <div className="sidebar-item" onClick={()=>sb.auth.signOut().then(()=>setSessao(null))} style={{marginTop:20}}>
-              Sair
+            <div className="sidebar-logout" onClick={()=>sb.auth.signOut().then(()=>setSessao(null))}>
+              🚪 Sair
             </div>
           </div>
           
           <div className="main">
             <div className="header">
-              <h1>{pagina.charAt(0).toUpperCase() + pagina.slice(1)}</h1>
-              <div>OAB/RJ 155.134</div>
+              <h1>
+                {pagina === 'processos' && '📋 Processos'}
+                {pagina === 'clientes' && '👤 Clientes'}
+                {pagina === 'prazos' && '⏰ Prazos Processuais'}
+                {pagina === 'agenda' && '📅 Agenda'}
+                {pagina === 'equipe' && '🧑‍💼 Equipe'}
+              </h1>
+              <div className="header-info">OAB/RJ 155.134</div>
             </div>
             
             <div className="content">
+              {msg && (msg.includes('✅') ? <div className="success">{msg}</div> : <div className="error">{msg}</div>)}
               {pagina === 'processos' && <PaginaProcessos processos={processos} clientes={clientes} />}
               {pagina === 'clientes' && <PaginaClientes clientes={clientes} />}
-              {pagina === 'prazos' && <PaginaPrazos prazos={prazos} processos={processos} uid={uid} />}
-              {pagina === 'agenda' && <PaginaAgenda agenda={agenda} />}
+              {pagina === 'prazos' && <PaginaPrazos prazos={prazos} processos={processos} setPrazos={setPrazos} uid={uid} setMsg={setMsg} />}
+              {pagina === 'agenda' && <PaginaAgenda agenda={agenda} prazos={prazos} processos={processos} />}
               {pagina === 'equipe' && <PaginaEquipe equipe={equipe} />}
             </div>
           </div>
@@ -157,12 +213,13 @@
       return (
         <div style={{display:'flex',height:'100vh',alignItems:'center',justifyContent:'center',background:'#0f1117'}}>
           <div style={{textAlign:'center'}}>
-            <h1 style={{marginBottom:20}}>Michelli Abreu Advocacia</h1>
+            <h1 style={{marginBottom:10,fontSize:32}}>Michelli Abreu Advocacia</h1>
+            <p style={{marginBottom:30,color:'#8b949e',fontSize:14}}>Sistema de Gestão de Prazos Processuais</p>
             <button onClick={async()=>{
               const {error} = await sb.auth.signInWithOAuth({provider:'github',options:{redirectTo:window.location.origin}});
               if(error) console.log(error);
-            }}>
-              Login com GitHub
+            }} style={{padding:'12px 24px',fontSize:16}}>
+              🔐 Login com GitHub
             </button>
           </div>
         </div>
@@ -173,7 +230,6 @@
     function PaginaProcessos({processos, clientes}) {
       return (
         <div>
-          <h2>Lista de Processos</h2>
           <table>
             <thead>
               <tr>
@@ -181,21 +237,22 @@
                 <th>Tipo</th>
                 <th>Cliente</th>
                 <th>Status</th>
-                <th>Ações</th>
+                <th>Responsável</th>
               </tr>
             </thead>
             <tbody>
-              {processos.map(p => (
+              {processos.filter(p=>!p.arquivado).map(p => (
                 <tr key={p.id}>
-                  <td>{p.numero}</td>
+                  <td><strong>{p.numero}</strong></td>
                   <td>{p.tipo}</td>
                   <td>{clientes.find(c=>c.id===p.clienteId)?.nome}</td>
-                  <td>{p.status}</td>
-                  <td>Ver detalhes</td>
+                  <td><span className={`prazo-badge badge-${p.status}`}>{p.status}</span></td>
+                  <td>{p.responsavel}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {processos.length === 0 && <div className="loading">Nenhum processo cadastrado</div>}
         </div>
       );
     }
@@ -204,7 +261,6 @@
     function PaginaClientes({clientes}) {
       return (
         <div>
-          <h2>Lista de Clientes</h2>
           <table>
             <thead>
               <tr>
@@ -217,114 +273,237 @@
             <tbody>
               {clientes.map(c => (
                 <tr key={c.id}>
-                  <td>{c.nome}</td>
+                  <td><strong>{c.nome}</strong></td>
                   <td>{c.cpfCnpj}</td>
-                  <td>{c.email}</td>
-                  <td>{c.telefone}</td>
+                  <td>{c.email || '—'}</td>
+                  <td>{c.telefone || '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {clientes.length === 0 && <div className="loading">Nenhum cliente cadastrado</div>}
         </div>
       );
     }
 
-    // Página de Prazos (NOVA!)
-    function PaginaPrazos({prazos, processos, uid}) {
-      const [novo, setNovo] = useState({titulo:'',dataVencimento:'',procId:'',prioridade:'media'});
+    // Página de Prazos (COMPLETA!)
+    function PaginaPrazos({prazos, processos, setPrazos, uid, setMsg}) {
+      const [novo, setNovo] = useState({titulo:'',dataVencimento:'',procId:'',prioridade:'media',obs:''});
       const [salvando, setSalvando] = useState(false);
+      const [filtroStatus, setFiltroStatus] = useState('pendente');
+      const [filtroProc, setFiltroProc] = useState('');
+      const [editando, setEditando] = useState(null);
 
       const criarPrazo = async() => {
         if(!novo.titulo || !novo.dataVencimento || !novo.procId) {
-          alert('Preencha todos os campos');
+          setMsg('❌ Preencha Título, Data e Processo');
           return;
         }
         
         setSalvando(true);
+        const id = Date.now();
         const {error} = await sb.from('tarefas').insert([{
-          id: Date.now(),
+          id: id,
           user_id: uid,
           titulo: novo.titulo,
           dataVencimento: novo.dataVencimento,
           procId: parseInt(novo.procId),
           prioridade: novo.prioridade,
           status: 'pendente',
+          obs: novo.obs,
           arquivada: false,
         }]);
         
         if(!error) {
-          setNovo({titulo:'',dataVencimento:'',procId:'',prioridade:'media'});
-          alert('✅ Prazo criado!');
+          setPrazos([...prazos, {id,user_id:uid,titulo:novo.titulo,dataVencimento:novo.dataVencimento,procId:parseInt(novo.procId),prioridade:novo.prioridade,status:'pendente',obs:novo.obs,arquivada:false}]);
+          setNovo({titulo:'',dataVencimento:'',procId:'',prioridade:'media',obs:''});
+          setMsg('✅ Prazo criado com sucesso!');
+          setTimeout(()=>setMsg(''),3000);
+        } else {
+          setMsg('❌ Erro ao criar prazo');
         }
         setSalvando(false);
       };
 
+      const atualizarPrazo = async(prazoId, dados) => {
+        const {error} = await sb.from('tarefas').update(dados).eq('id', prazoId);
+        if(!error) {
+          setPrazos(prazos.map(p => p.id === prazoId ? {...p, ...dados} : p));
+          setEditando(null);
+          setMsg('✅ Prazo atualizado!');
+          setTimeout(()=>setMsg(''),3000);
+        }
+      };
+
+      const deletarPrazo = async(prazoId) => {
+        if(!confirm('Tem certeza que deseja deletar este prazo?')) return;
+        const {error} = await sb.from('tarefas').delete().eq('id', prazoId);
+        if(!error) {
+          setPrazos(prazos.filter(p => p.id !== prazoId));
+          setMsg('✅ Prazo deletado!');
+          setTimeout(()=>setMsg(''),3000);
+        }
+      };
+
+      const prazosFilmados = prazos.filter(p => 
+        (filtroStatus === '' || p.status === filtroStatus) &&
+        (filtroProc === '' || p.procId === parseInt(filtroProc)) &&
+        !p.arquivada
+      );
+
       return (
         <div>
-          <h2>Prazos Processuais</h2>
-          
           <div className="card">
-            <h3>Novo Prazo</h3>
-            <div className="form-group">
-              <label>Título</label>
-              <input value={novo.titulo} onChange={e=>setNovo({...novo,titulo:e.target.value})} placeholder="Ex: Protocolar petição" />
+            <h3>➕ Novo Prazo</h3>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>Título do Prazo</label>
+                <input value={novo.titulo} onChange={e=>setNovo({...novo,titulo:e.target.value})} placeholder="Ex: Protocolar petição" />
+              </div>
+              <div className="form-group">
+                <label>Data de Vencimento</label>
+                <input type="date" value={novo.dataVencimento} onChange={e=>setNovo({...novo,dataVencimento:e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label>Processo</label>
+                <select value={novo.procId} onChange={e=>setNovo({...novo,procId:e.target.value})}>
+                  <option value="">Selecione um processo...</option>
+                  {processos.map(p=><option key={p.id} value={p.id}>{p.numero}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Prioridade</label>
+                <select value={novo.prioridade} onChange={e=>setNovo({...novo,prioridade:e.target.value})}>
+                  <option value="baixa">Baixa</option>
+                  <option value="media">Média</option>
+                  <option value="alta">Alta</option>
+                </select>
+              </div>
             </div>
             <div className="form-group">
-              <label>Data de Vencimento</label>
-              <input type="date" value={novo.dataVencimento} onChange={e=>setNovo({...novo,dataVencimento:e.target.value})} />
+              <label>Observações</label>
+              <textarea value={novo.obs} onChange={e=>setNovo({...novo,obs:e.target.value})} placeholder="Adicione detalhes sobre este prazo..." style={{minHeight:60}} />
             </div>
-            <div className="form-group">
-              <label>Processo</label>
-              <select value={novo.procId} onChange={e=>setNovo({...novo,procId:e.target.value})}>
-                <option value="">Selecione...</option>
-                {processos.map(p=><option key={p.id} value={p.id}>{p.numero}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Prioridade</label>
-              <select value={novo.prioridade} onChange={e=>setNovo({...novo,prioridade:e.target.value})}>
-                <option value="baixa">Baixa</option>
-                <option value="media">Média</option>
-                <option value="alta">Alta</option>
-              </select>
-            </div>
-            <button onClick={criarPrazo} disabled={salvando}>{salvando?'Salvando...':'Criar Prazo'}</button>
+            <button onClick={criarPrazo} disabled={salvando}>{salvando?'Salvando...':'✅ Criar Prazo'}</button>
           </div>
 
-          <h3>Prazos Pendentes</h3>
+          <h3>📋 Prazos</h3>
+          <div className="filtros">
+            <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}>
+              <option value="">Todos os status</option>
+              <option value="pendente">Pendentes</option>
+              <option value="concluido">Concluídos</option>
+            </select>
+            <select value={filtroProc} onChange={e=>setFiltroProc(e.target.value)}>
+              <option value="">Todos os processos</option>
+              {processos.map(p=><option key={p.id} value={p.id}>{p.numero}</option>)}
+            </select>
+          </div>
+
+          {prazosFilmados.length === 0 ? (
+            <div className="loading">Nenhum prazo encontrado</div>
+          ) : (
+            prazosFilmados.map(p => {
+              const proc = processos.find(pr => pr.id === p.procId);
+              const dias = diasRestantes(p.dataVencimento);
+              return (
+                <div key={p.id} className="prazo-item">
+                  <div className="prazo-header">
+                    <div className="prazo-title">{p.titulo}</div>
+                    <span className={`prazo-badge badge-${p.prioridade}`}>{p.prioridade}</span>
+                  </div>
+                  <div className="prazo-meta">
+                    <div>📌 Processo: <strong>{proc?.numero}</strong></div>
+                    <div>📅 Vencimento: <strong>{formatarData(p.dataVencimento)}</strong></div>
+                    {dias !== null && <div>⏳ {dias > 0 ? `${dias} dias` : dias === 0 ? 'Vence hoje!' : `${Math.abs(dias)} dias atrasado`}</div>}
+                    <span className={`prazo-badge badge-${p.status}`}>{p.status}</span>
+                  </div>
+                  {p.obs && <div style={{fontSize:13,color:'#8b949e',marginBottom:12}}>📝 {p.obs}</div>}
+                  <div className="prazo-actions">
+                    {p.status === 'pendente' && (
+                      <button className="secondary" onClick={()=>atualizarPrazo(p.id,{status:'concluido'})} style={{fontSize:12,padding:'6px 12px'}}>✅ Concluir</button>
+                    )}
+                    {p.status === 'concluido' && (
+                      <button className="secondary" onClick={()=>atualizarPrazo(p.id,{status:'pendente'})} style={{fontSize:12,padding:'6px 12px'}}>↩️ Reabrir</button>
+                    )}
+                    <button className="danger" onClick={()=>deletarPrazo(p.id)} style={{fontSize:12,padding:'6px 12px'}}>🗑️ Deletar</button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      );
+    }
+
+    // Página de Agenda
+    function PaginaAgenda({agenda, prazos, processos}) {
+      const prazosProximos = prazos
+        .filter(p => p.status === 'pendente' && !p.arquivada)
+        .sort((a,b) => new Date(a.dataVencimento) - new Date(b.dataVencimento))
+        .slice(0, 10);
+
+      return (
+        <div>
+          <h3>📅 Próximos Prazos</h3>
+          {prazosProximos.length === 0 ? (
+            <div className="loading">Nenhum prazo agendado</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Processo</th>
+                  <th>Prazo</th>
+                  <th>Data</th>
+                  <th>Dias Restantes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prazosProximos.map(p => {
+                  const proc = processos.find(pr => pr.id === p.procId);
+                  const dias = diasRestantes(p.dataVencimento);
+                  return (
+                    <tr key={p.id}>
+                      <td>{proc?.numero}</td>
+                      <td>{p.titulo}</td>
+                      <td>{formatarData(p.dataVencimento)}</td>
+                      <td>
+                        <span style={{color: dias < 0 ? '#f85149' : dias < 5 ? '#d29922' : '#3fb950'}}>
+                          {dias > 0 ? `${dias} dias` : dias === 0 ? 'Hoje' : `${Math.abs(dias)} atrasado`}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      );
+    }
+
+    // Página de Equipe
+    function PaginaEquipe({equipe}) {
+      return (
+        <div>
           <table>
             <thead>
               <tr>
-                <th>Processo</th>
-                <th>Título</th>
-                <th>Data de Vencimento</th>
-                <th>Prioridade</th>
-                <th>Ações</th>
+                <th>Nome</th>
+                <th>Cargo</th>
               </tr>
             </thead>
             <tbody>
-              {prazos.filter(p=>p.status==='pendente').map(p => (
-                <tr key={p.id}>
-                  <td>{processos.find(pr=>pr.id===p.procId)?.numero}</td>
-                  <td>{p.titulo}</td>
-                  <td>{p.dataVencimento}</td>
-                  <td>{p.prioridade}</td>
-                  <td>Editar | Concluir</td>
+              {equipe.map(e => (
+                <tr key={e.id}>
+                  <td><strong>{e.nome}</strong></td>
+                  <td>{e.cargo}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       );
-    }
-
-    // Páginas vazias (para depois)
-    function PaginaAgenda({agenda}) {
-      return <div><h2>Agenda</h2><p>Em desenvolvimento...</p></div>;
-    }
-
-    function PaginaEquipe({equipe}) {
-      return <div><h2>Equipe</h2>{equipe.map(e=><div key={e.id}>{e.nome} - {e.cargo}</div>)}</div>;
     }
 
     // Renderizar
