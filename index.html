@@ -3925,6 +3925,10 @@ function AppPrincipal({user}){
           exitos: parseCampo(p.exitos, []),
           debito: parseCampo(p.debito, null),
           documentos: parseCampo(p.documentos, []),
+          docChecklist: parseCampo(p.docChecklist, []),
+          prazoProcessual: parseCampo(p.prazoProcessual, null),
+          audiencia: parseCampo(p.audiencia, null),
+          vinculo: parseCampo(p.vinculo, null),
         })));
         setClientes(rCli.data&&rCli.data.length?rCli.data:CLIENTES0);
         setParcelas(rParc.data&&rParc.data.length?rParc.data:FINANC0);
@@ -3940,6 +3944,13 @@ function AppPrincipal({user}){
     return () => { ativo = false; };
   },[uidUser]);
 
+  // Cada tabela só deve receber os campos JSON que de fato existem nela.
+  // "tarefas", "agenda", "clientes" etc. não têm colunas como "andamentos" ou "checklist" —
+  // tentar enviá-las (mesmo como undefined) já causava erro "column not found" no Supabase.
+  const CAMPOS_JSON_POR_TABELA = {
+    processos: ["andamentos","partes","checklist","exitos","debito","documentos","docChecklist","prazoProcessual","audiencia","vinculo"],
+  };
+
   const autoSave = React.useCallback((tabela, dados, delay=1200) => {
     if(carregandoDados) return;
     if(!Array.isArray(dados)) return;
@@ -3948,16 +3959,14 @@ function AppPrincipal({user}){
     saveTimer.current[tabela] = setTimeout(async()=>{
       try {
         if(dados.length>0){
+          const camposJSON = CAMPOS_JSON_POR_TABELA[tabela] || [];
           const comUser = dados.map(d=>{
             const s = sanitizarParaSupabase(d);
-            return {...s, user_id:uidUser,
-              andamentos: s.andamentos!==undefined ? JSON.stringify(s.andamentos) : undefined,
-              partes: s.partes!==undefined ? JSON.stringify(s.partes) : undefined,
-              checklist: s.checklist!==undefined ? JSON.stringify(s.checklist) : undefined,
-              exitos: s.exitos!==undefined ? JSON.stringify(s.exitos) : undefined,
-              debito: s.debito!==undefined ? JSON.stringify(s.debito) : undefined,
-              documentos: s.documentos!==undefined ? JSON.stringify(s.documentos) : undefined,
-            };
+            const extra = {};
+            camposJSON.forEach(campo=>{
+              if(s[campo]!==undefined) extra[campo] = JSON.stringify(s[campo]);
+            });
+            return {...s, user_id:uidUser, ...extra};
           });
           const { error } = await sb.from(tabela).upsert(comUser, {onConflict:"id"});
           if(error) throw error;
