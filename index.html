@@ -3750,12 +3750,122 @@ function ModalFormCompromisso({compromisso, processos, clientes, equipe, onSave,
   );
 }
 
+function CalendarioAgenda({itens, onAbrirItem, onNovoNoDia}){
+  const [mesRef, setMesRef] = useState(()=>{ const d = new Date(hoje); d.setDate(1); return d; });
+  const [diaSelecionado, setDiaSelecionado] = useState(null);
+
+  const mudarMes = delta => setMesRef(d=>{ const n = new Date(d); n.setMonth(n.getMonth()+delta); return n; });
+  const irParaHoje = () => { const d = new Date(hoje); d.setDate(1); setMesRef(d); setDiaSelecionado(hoje.toISOString().slice(0,10)); };
+
+  const porDia = useMemo(()=>{
+    const map = {};
+    itens.forEach(it=>{
+      const chave = (it.dataHora||"").slice(0,10);
+      if(!chave) return;
+      if(!map[chave]) map[chave] = [];
+      map[chave].push(it);
+    });
+    Object.values(map).forEach(arr=>arr.sort((a,b)=>a.dataHora.localeCompare(b.dataHora)));
+    return map;
+  },[itens]);
+
+  const ano = mesRef.getFullYear(), mes = mesRef.getMonth();
+  const primeiroDiaSemana = new Date(ano, mes, 1).getDay();
+  const diasNoMes = new Date(ano, mes+1, 0).getDate();
+  const celulas = [];
+  for(let i=0;i<primeiroDiaSemana;i++) celulas.push(null);
+  for(let d=1;d<=diasNoMes;d++) celulas.push(d);
+  while(celulas.length%7!==0) celulas.push(null);
+
+  const hojeStr = hoje.toISOString().slice(0,10);
+  const chaveDia = d => `${ano}-${String(mes+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const itensDoDiaSel = diaSelecionado ? (porDia[diaSelecionado]||[]) : [];
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14,background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"8px 14px"}}>
+        <button onClick={()=>mudarMes(-1)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,width:30,height:30,cursor:"pointer",fontSize:14,color:"var(--text2)"}}>←</button>
+        <span style={{fontSize:13,fontWeight:700,color:"var(--navy)",textTransform:"capitalize",minWidth:160,textAlign:"center"}}>{mesRef.toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</span>
+        <button onClick={()=>mudarMes(1)} style={{background:"none",border:"1px solid var(--border2)",borderRadius:5,width:30,height:30,cursor:"pointer",fontSize:14,color:"var(--text2)"}}>→</button>
+        <span style={{width:1,height:20,background:"var(--border1)"}}/>
+        <button onClick={irParaHoje} style={{fontSize:11,padding:"5px 12px",cursor:"pointer",borderRadius:5,border:"1px solid var(--border2)",background:"#fff",color:"var(--accent)",fontWeight:600}}>Hoje</button>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,marginBottom:6}}>
+        {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d=>(
+          <div key={d} style={{textAlign:"center",fontSize:10.5,fontWeight:700,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".4px",padding:"4px 0"}}>{d}</div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+        {celulas.map((d,i)=>{
+          if(d===null) return <div key={i} style={{minHeight:92}}/>;
+          const chave = chaveDia(d);
+          const itensDia = porDia[chave]||[];
+          const ehHoje = chave===hojeStr;
+          const selecionado = chave===diaSelecionado;
+          return (
+            <div
+              key={i}
+              onClick={()=>setDiaSelecionado(chave)}
+              style={{
+                minHeight:92, background:selecionado?"var(--accent-light)":"#fff",
+                border:`1px solid ${ehHoje?"var(--accent)":"var(--border1)"}`, borderRadius:7,
+                padding:"6px 6px", cursor:"pointer", display:"flex", flexDirection:"column", gap:3,
+              }}
+            >
+              <span style={{fontSize:11,fontWeight:ehHoje?800:600,color:ehHoje?"var(--accent)":"var(--text1)"}}>{d}</span>
+              <div style={{display:"flex",flexDirection:"column",gap:2,overflow:"hidden"}}>
+                {itensDia.slice(0,3).map(it=>{
+                  const cfg = TIPO_AGENDA_CFG[it.tipo]||TIPO_AGENDA_CFG.outro;
+                  return (
+                    <div key={it.id} onClick={e=>{e.stopPropagation();onAbrirItem(it);}} style={{fontSize:9.5,padding:"1px 5px",borderRadius:3,background:cfg.bg,color:cfg.color,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {it.titulo}
+                    </div>
+                  );
+                })}
+                {itensDia.length>3 && <span style={{fontSize:9,color:"var(--text3)",paddingLeft:5}}>+{itensDia.length-3} mais</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {diaSelecionado && (
+        <div style={{marginTop:16,background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"14px 16px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <p style={{fontSize:12.5,fontWeight:700,color:"var(--navy)",margin:0}}>{new Date(diaSelecionado+"T00:00:00").toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})}</p>
+            {onNovoNoDia && <button onClick={()=>onNovoNoDia(diaSelecionado)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>+ Compromisso neste dia</button>}
+          </div>
+          {itensDoDiaSel.length===0?(
+            <p style={{fontSize:12,color:"var(--text2)"}}>Nada agendado para este dia.</p>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {itensDoDiaSel.map(it=>{
+                const cfg = TIPO_AGENDA_CFG[it.tipo]||TIPO_AGENDA_CFG.outro;
+                return (
+                  <div key={it.id} onClick={()=>onAbrirItem(it)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",border:"1px solid var(--border1)",borderRadius:6,cursor:"pointer"}}>
+                    <span style={{fontSize:11,color:"var(--text2)",width:44,flexShrink:0}}>{new Date(it.dataHora).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}</span>
+                    <span style={{fontSize:12.5,fontWeight:600,flex:1}}>{it.titulo}</span>
+                    <Pill bg={cfg.bg} color={cfg.color} label={it._origemTarefa?"Prazo/Tarefa":cfg.label} sm/>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, onAbrirProcesso, onIrParaTarefa}){
   const [editando,setEditando] = useState(null);
   const [novo,setNovo] = useState(false);
+  const [novoComData,setNovoComData] = useState(null);
   const [filtroTipo,setFiltroTipo] = useState("todos");
+  const [visao,setVisao] = useState("calendario");
 
-  // Problema/pedido: os prazos e tarefas com data também aparecem na Agenda, mesclados
+  // Pedido: os prazos e tarefas com data também aparecem na Agenda, mesclados
   // com os compromissos — marcados como "Prazo/Tarefa" e levando de volta à página de origem.
   const itensDeTarefas = useMemo(()=>{
     return (tarefas||[])
@@ -3782,13 +3892,18 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, 
 
   const salvar = form => {
     setAgenda(ag=>form.id?ag.map(c=>c.id===form.id?form:c):[...ag,{...form,id:Date.now()}]);
-    setEditando(null); setNovo(false);
+    setEditando(null); setNovo(false); setNovoComData(null);
   };
   const excluir = id => {
     if(!confirm("Excluir este compromisso?")) return;
     setAgenda(ag=>ag.filter(c=>c.id!==id));
   };
   const procNum = id => processos.find(p=>String(p.id)===String(id))?.numero || "";
+
+  const abrirItem = (it) => {
+    if(it._origemTarefa){ onIrParaTarefa && onIrParaTarefa(); return; }
+    setEditando(it);
+  };
 
   return (
     <div>
@@ -3797,7 +3912,14 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, 
           <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Agenda</h1>
           <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{(agenda||[]).length} compromisso(s) · {itensDeTarefas.length} prazo(s)/tarefa(s) com data</p>
         </div>
-        <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo compromisso</button>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",background:"var(--bg2)",borderRadius:7,padding:3}}>
+            {[["calendario","📅 Calendário"],["lista","☰ Lista"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setVisao(v)} style={{padding:"6px 13px",fontSize:11.5,fontWeight:600,border:"none",borderRadius:5,cursor:"pointer",background:visao===v?"#fff":"transparent",color:visao===v?"var(--navy2)":"var(--text2)",boxShadow:visao===v?"0 1px 3px rgba(0,0,0,.1)":"none",whiteSpace:"nowrap"}}>{l}</button>
+            ))}
+          </div>
+          <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo compromisso</button>
+        </div>
       </div>
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"8px 14px",marginBottom:12}}>
         <div style={{display:"flex",gap:0}}>
@@ -3806,40 +3928,45 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, 
           ))}
         </div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {lista.length===0?(
-          <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum compromisso encontrado.</div>
-        ):lista.map(c=>{
-          const cfg = TIPO_AGENDA_CFG[c.tipo]||TIPO_AGENDA_CFG.outro;
-          const deTarefa = !!c._origemTarefa;
-          return (
-            <div key={c.id} style={{background:"#fff",border:`1px solid ${deTarefa?"#C5DCF2":"var(--border1)"}`,borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:70,flexShrink:0}}>
-                <p style={{fontSize:12.5,fontWeight:700,margin:0,color:"var(--navy)"}}>{fmtDataHoraCurta(c.dataHora)}</p>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                  <p style={{fontSize:13,fontWeight:600,margin:0}}>{c.titulo}</p>
-                  <Pill bg={cfg.bg} color={cfg.color} label={deTarefa?"Prazo/Tarefa":cfg.label} sm/>
+
+      {visao==="calendario" ? (
+        <CalendarioAgenda itens={lista} onAbrirItem={abrirItem} onNovoNoDia={dia=>setNovoComData(dia)}/>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {lista.length===0?(
+            <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum compromisso encontrado.</div>
+          ):lista.map(c=>{
+            const cfg = TIPO_AGENDA_CFG[c.tipo]||TIPO_AGENDA_CFG.outro;
+            const deTarefa = !!c._origemTarefa;
+            return (
+              <div key={c.id} style={{background:"#fff",border:`1px solid ${deTarefa?"#C5DCF2":"var(--border1)"}`,borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:70,flexShrink:0}}>
+                  <p style={{fontSize:12.5,fontWeight:700,margin:0,color:"var(--navy)"}}>{fmtDataHoraCurta(c.dataHora)}</p>
                 </div>
-                <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:11,color:"var(--text2)"}}>
-                  {c.procId&&<span onClick={()=>{const p=processos.find(x=>String(x.id)===String(c.procId));if(p)onAbrirProcesso(p);}} style={{cursor:"pointer",textDecoration:"underline"}}>📋 {procNum(c.procId)}</span>}
-                  {c.local&&<span>📍 {c.local}</span>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                    <p style={{fontSize:13,fontWeight:600,margin:0}}>{c.titulo}</p>
+                    <Pill bg={cfg.bg} color={cfg.color} label={deTarefa?"Prazo/Tarefa":cfg.label} sm/>
+                  </div>
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:11,color:"var(--text2)"}}>
+                    {c.procId&&<span onClick={()=>{const p=processos.find(x=>String(x.id)===String(c.procId));if(p)onAbrirProcesso(p);}} style={{cursor:"pointer",textDecoration:"underline"}}>📋 {procNum(c.procId)}</span>}
+                    {c.local&&<span>📍 {c.local}</span>}
+                  </div>
                 </div>
+                {deTarefa ? (
+                  <button onClick={()=>onIrParaTarefa&&onIrParaTarefa()} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Ver em Prazos e Tarefas</button>
+                ) : (
+                  <>
+                    <button onClick={()=>setEditando(c)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Editar</button>
+                    <button onClick={()=>excluir(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:0}}>🗑</button>
+                  </>
+                )}
               </div>
-              {deTarefa ? (
-                <button onClick={()=>onIrParaTarefa&&onIrParaTarefa()} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Ver em Prazos e Tarefas</button>
-              ) : (
-                <>
-                  <button onClick={()=>setEditando(c)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Editar</button>
-                  <button onClick={()=>excluir(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:0}}>🗑</button>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {(editando||novo)&&<ModalFormCompromisso compromisso={editando} processos={processos} clientes={clientes} equipe={equipe||[]} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}}/>}
+            );
+          })}
+        </div>
+      )}
+      {(editando||novo||novoComData)&&<ModalFormCompromisso compromisso={editando||(novoComData?{titulo:"",tipo:"reuniao",dataHora:`${novoComData}T09:00`,procId:"",clienteId:"",responsavelId:"",local:"",confirmado:true,obs:""}:null)} processos={processos} clientes={clientes} equipe={equipe||[]} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);setNovoComData(null);}}/>}
     </div>
   );
 }
