@@ -11,8 +11,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
   const SUPABASE_URL = "https://hgswycfsqtvvbccfbblr.supabase.co";
+  // Cole aqui o "Client ID" que você criar no Google Cloud Console (veja instruções da Michelli).
+  // Sem isso preenchido, o botão "Conectar Google Agenda" mostra um aviso pedindo pra configurar.
+  const GOOGLE_CLIENT_ID = "SEU_CLIENT_ID_AQUI.apps.googleusercontent.com";
   const SUPABASE_KEY = "sb_publishable_EMQ8cp_3Zx84qDmXwNLC8A_YGkF-K_T";
   const IA_PROXY_URL = "https://hgswycfsqtvvbccfbblr.supabase.co/functions/v1/ia";
   let sb = null;
@@ -3858,7 +3862,7 @@ function CalendarioAgenda({itens, onAbrirItem, onNovoNoDia}){
   );
 }
 
-function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, onAbrirProcesso, onIrParaTarefa}){
+function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, onAbrirProcesso, onIrParaTarefa, googleConectado, googleSincronizando, googleUltimaSinc, googleErro, onConectarGoogle, onDesconectarGoogle, onSincronizarGoogle, onEnviarAoGoogle, onExcluirNoGoogle}){
   const [editando,setEditando] = useState(null);
   const [novo,setNovo] = useState(false);
   const [novoComData,setNovoComData] = useState(null);
@@ -3890,13 +3894,25 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, 
     return listaCombinada.filter(c=>filtroTipo==="todos"||c.tipo===filtroTipo).sort((a,b)=>new Date(a.dataHora)-new Date(b.dataHora));
   },[listaCombinada,filtroTipo]);
 
+  // Ao salvar/excluir um compromisso, também reflete no Google Agenda (se conectado).
   const salvar = form => {
-    setAgenda(ag=>form.id?ag.map(c=>c.id===form.id?form:c):[...ag,{...form,id:Date.now()}]);
+    const ehNovo = !form.id;
+    const salvo = ehNovo ? {...form,id:Date.now()} : form;
+    setAgenda(ag=>ehNovo?[...ag,salvo]:ag.map(c=>c.id===form.id?form:c));
     setEditando(null); setNovo(false); setNovoComData(null);
+    if(googleConectado && onEnviarAoGoogle){
+      onEnviarAoGoogle(salvo).then(idEvento=>{
+        if(idEvento) setAgenda(ag=>ag.map(c=>c.id===salvo.id?{...c,googleEventId:idEvento}:c));
+      });
+    }
   };
   const excluir = id => {
     if(!confirm("Excluir este compromisso?")) return;
+    const item = agenda.find(c=>c.id===id);
     setAgenda(ag=>ag.filter(c=>c.id!==id));
+    if(googleConectado && item?.googleEventId && onExcluirNoGoogle){
+      onExcluirNoGoogle(item.googleEventId);
+    }
   };
   const procNum = id => processos.find(p=>String(p.id)===String(id))?.numero || "";
 
@@ -3921,6 +3937,32 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, 
           <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo compromisso</button>
         </div>
       </div>
+
+      <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>🔗</span>
+          <div>
+            <p style={{fontSize:12,fontWeight:700,margin:0,color:"var(--navy)"}}>Google Agenda</p>
+            <p style={{fontSize:10.5,color:"var(--text2)",margin:0}}>
+              {googleConectado
+                ? (googleSincronizando ? "Sincronizando…" : googleUltimaSinc ? `Última sincronização: ${fmtDataHoraCurta(googleUltimaSinc.toISOString())}` : "Conectado")
+                : "Não conectado"}
+            </p>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {googleErro && <span style={{fontSize:10.5,color:"var(--red)",maxWidth:280}}>{googleErro}</span>}
+          {googleConectado ? (
+            <>
+              <button onClick={onSincronizarGoogle} disabled={googleSincronizando} style={{...btnSec,fontSize:11,padding:"6px 12px",opacity:googleSincronizando?.6:1}}>{googleSincronizando?"Sincronizando…":"↻ Sincronizar agora"}</button>
+              <button onClick={onDesconectarGoogle} style={{...btnSec,fontSize:11,padding:"6px 12px",color:"var(--text2)"}}>Desconectar</button>
+            </>
+          ) : (
+            <button onClick={onConectarGoogle} style={{...btnPri,fontSize:11,padding:"6px 14px"}}>Conectar Google Agenda</button>
+          )}
+        </div>
+      </div>
+
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"8px 14px",marginBottom:12}}>
         <div style={{display:"flex",gap:0}}>
           {[["todos","Todos"],...Object.entries(TIPO_AGENDA_CFG).map(([k,v])=>[k,v.label])].map(([v,l])=>(
@@ -4149,6 +4191,139 @@ function AppPrincipal({user}){
   const [novoClienteAoAbrir, setNovoClienteAoAbrir] = useState(false);
 
   const saveTimer = React.useRef({});
+  const googleTokenClientRef = React.useRef(null);
+  const [googleToken, setGoogleToken] = useState(null);
+  const [googleSincronizando, setGoogleSincronizando] = useState(false);
+  const [googleUltimaSinc, setGoogleUltimaSinc] = useState(null);
+  const [googleErro, setGoogleErro] = useState("");
+
+  const eventoGoogleParaCompromisso = (ev) => {
+    const inicio = ev.start?.dateTime || (ev.start?.date ? ev.start.date+"T00:00" : null);
+    if(!inicio) return null;
+    return {
+      titulo: ev.summary || "(sem título)",
+      tipo: "outro",
+      dataHora: inicio.slice(0,16),
+      local: ev.location || "",
+      obs: ev.description || "",
+      googleEventId: ev.id,
+      origemGoogle: true,
+    };
+  };
+
+  const enviarCompromissoAoGoogle = React.useCallback(async (compromisso, token) => {
+    const tk = token || googleToken;
+    if(!tk) return null;
+    const corpo = {
+      summary: compromisso.titulo,
+      location: compromisso.local || undefined,
+      description: compromisso.obs || undefined,
+      start: { dateTime: new Date(compromisso.dataHora).toISOString() },
+      end: { dateTime: new Date(new Date(compromisso.dataHora).getTime()+60*60*1000).toISOString() },
+    };
+    try {
+      const url = compromisso.googleEventId
+        ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${compromisso.googleEventId}`
+        : `https://www.googleapis.com/calendar/v3/calendars/primary/events`;
+      const res = await fetch(url, {
+        method: compromisso.googleEventId ? "PATCH" : "POST",
+        headers: { Authorization: `Bearer ${tk}`, "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+      if(!res.ok) return null;
+      const data = await res.json();
+      return data.id;
+    } catch(e) {
+      console.error("Erro ao enviar compromisso ao Google Agenda:", e);
+      return null;
+    }
+  }, [googleToken]);
+
+  const excluirEventoNoGoogle = React.useCallback(async (googleEventId, token) => {
+    const tk = token || googleToken;
+    if(!tk || !googleEventId) return;
+    try {
+      await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tk}` },
+      });
+    } catch(e) { console.error("Erro ao excluir evento no Google Agenda:", e); }
+  }, [googleToken]);
+
+  const sincronizarComGoogle = React.useCallback(async (tokenParam) => {
+    const tk = tokenParam || googleToken;
+    if(!tk) return;
+    setGoogleSincronizando(true);
+    setGoogleErro("");
+    try {
+      const timeMin = new Date(Date.now() - 30*864e5).toISOString();
+      const timeMax = new Date(Date.now() + 180*864e5).toISOString();
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&maxResults=250`, {
+        headers: { Authorization: `Bearer ${tk}` },
+      });
+      if(!res.ok) throw new Error(`Erro ${res.status} ao buscar eventos do Google Agenda. Tente conectar novamente.`);
+      const data = await res.json();
+      const eventosGoogle = (data.items || []).filter(ev => ev.status !== "cancelled");
+
+      let agendaAtualAposMerge = null;
+      setAgenda(ag => {
+        let atualizada = [...ag];
+        eventosGoogle.forEach(ev => {
+          const convertido = eventoGoogleParaCompromisso(ev);
+          if(!convertido) return;
+          const idx = atualizada.findIndex(c => c.googleEventId === ev.id);
+          if(idx >= 0) atualizada[idx] = { ...atualizada[idx], ...convertido, id: atualizada[idx].id };
+          else atualizada.push({ ...convertido, id: Date.now()+Math.random() });
+        });
+        agendaAtualAposMerge = atualizada;
+        return atualizada;
+      });
+
+      // Envia para o Google os compromissos criados aqui que ainda não têm evento vinculado
+      const paraEnviar = (agendaAtualAposMerge || agenda).filter(c => !c.googleEventId);
+      for (const c of paraEnviar) {
+        const idEvento = await enviarCompromissoAoGoogle(c, tk);
+        if(idEvento) setAgenda(ag => ag.map(x => x.id===c.id ? {...x, googleEventId: idEvento} : x));
+      }
+
+      setGoogleUltimaSinc(new Date());
+    } catch(e) {
+      setGoogleErro(e.message || "Erro ao sincronizar com o Google Agenda.");
+    }
+    setGoogleSincronizando(false);
+  }, [googleToken, agenda, enviarCompromissoAoGoogle]);
+
+  const conectarGoogle = () => {
+    setGoogleErro("");
+    if(!window.google || !window.google.accounts || !window.google.accounts.oauth2){
+      setGoogleErro("A biblioteca do Google ainda não carregou — aguarde alguns segundos e tente de novo.");
+      return;
+    }
+    if(!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.includes("SEU_CLIENT_ID")){
+      setGoogleErro("Configure o GOOGLE_CLIENT_ID no topo do código antes de conectar (veja as instruções que a Michelli te passou).");
+      return;
+    }
+    if(!googleTokenClientRef.current){
+      googleTokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: "https://www.googleapis.com/auth/calendar.events",
+        callback: (resp) => {
+          if(resp.error){ setGoogleErro("Erro ao autorizar: " + resp.error); return; }
+          setGoogleToken(resp.access_token);
+          sincronizarComGoogle(resp.access_token);
+        },
+      });
+    }
+    googleTokenClientRef.current.requestAccessToken({ prompt: googleToken ? "" : "consent" });
+  };
+
+  const desconectarGoogle = () => {
+    if(googleToken && window.google?.accounts?.oauth2) {
+      window.google.accounts.oauth2.revoke(googleToken, ()=>{});
+    }
+    setGoogleToken(null);
+    setGoogleUltimaSinc(null);
+  };
   const sincStatusRef = React.useRef("ocioso");
   const [sincStatus, setSincStatus] = useState("ocioso");
 
@@ -4303,7 +4478,7 @@ function AppPrincipal({user}){
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso}/>}
-        {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")}/>}
+        {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} processos={processos}/>}
         {pagina==="relatorios" && <PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
         {pagina==="intimacoes" && <PaginaIntimacoes intimacoes={intimacoes} setIntimacoes={setIntimacoes} processos={processos} setProcessos={setProcessos} equipe={equipe} setTarefas={setTarefas} onAbrirProcesso={abrirProcesso}/>}
