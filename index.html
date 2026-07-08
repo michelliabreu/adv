@@ -2902,6 +2902,7 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
     if(!confirm(aviso)) return;
     setClientes(cs=>cs.filter(x=>x.id!==c.id));
     setSelecionado(null);
+    excluirNoSupabase("clientes", c.id);
   };
 
   const montarQualificacao = (c) => {
@@ -3073,11 +3074,13 @@ function PaginaFinanceiro({parcelas,setParcelas,processos}){
     if(!confirm(`Excluir ${ids.length} parcela(s) selecionada(s)? Esta ação não pode ser desfeita.`)) return;
     setParcelas(ps=>ps.filter(p=>!ids.includes(p.id)));
     setSelecionados(s=>{ const novo={...s}; ids.forEach(id=>delete novo[id]); return novo; });
+    excluirNoSupabase("parcelas", ids);
   };
   const excluirUm = id => {
     if(!confirm("Excluir esta parcela? Esta ação não pode ser desfeita.")) return;
     setParcelas(ps=>ps.filter(p=>p.id!==id));
     setSelecionados(s=>{ const novo={...s}; delete novo[id]; return novo; });
+    excluirNoSupabase("parcelas", id);
   };
 
   return(
@@ -3429,6 +3432,7 @@ function PaginaEquipe({equipe, setEquipe}){
   const excluir = id => {
     if(!confirm("Remover este membro da equipe?")) return;
     setEquipe(es=>es.filter(e=>e.id!==id));
+    excluirNoSupabase("equipe", id);
   };
   return (
     <div>
@@ -3652,6 +3656,7 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
   const excluir = id => {
     if(!confirm("Excluir este prazo/tarefa? Esta ação não pode ser desfeita.")) return;
     setTarefas(ts=>ts.filter(t=>t.id!==id));
+    excluirNoSupabase("tarefas", id);
   };
 
   const respNome = id => (equipe||[]).find(m=>String(m.id)===String(id))?.nome || "";
@@ -3942,6 +3947,7 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, 
     if(!confirm("Excluir este compromisso?")) return;
     const item = agenda.find(c=>c.id===id);
     setAgenda(ag=>ag.filter(c=>c.id!==id));
+    excluirNoSupabase("agenda", id);
     if(googleConectado && item?.googleEventId && onExcluirNoGoogle){
       onExcluirNoGoogle(item.googleEventId);
     }
@@ -4201,6 +4207,21 @@ function sanitizarParaSupabase(obj){
     }
   });
   return limpo;
+}
+
+// Causa raiz do "dado excluído reaparece": o autoSave só fazia upsert (inserir/atualizar),
+// nunca DELETE. Então excluir algo na tela só escondia localmente — no Supabase a linha
+// continuava existindo e voltava no próximo carregamento. Esta função excluiu de verdade.
+async function excluirNoSupabase(tabela, idOuIds){
+  if(!sb) return;
+  try {
+    const ids = Array.isArray(idOuIds) ? idOuIds : [idOuIds];
+    if(ids.length === 0) return;
+    const { error } = await sb.from(tabela).delete().in("id", ids);
+    if(error) console.error(`Erro ao excluir de ${tabela}:`, error);
+  } catch(e) {
+    console.error(`Erro ao excluir de ${tabela}:`, e);
+  }
 }
 
 function AppPrincipal({user}){
