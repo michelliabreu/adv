@@ -2628,6 +2628,28 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     });
   },[processos,aba,busca,filtroCliente,filtroAno,filtroClassificacao,filtroSistema,filtroVara,filtroResponsavel]);
 
+  // Ordenação clicável das colunas da tabela de processos
+  const [ordenacao, setOrdenacao] = useState({campo:null, direcao:"asc"});
+  const ultimoMovDe = p => [...(p.andamentos||[])].sort((a,b)=>b.data.localeCompare(a.data))[0]?.data || "";
+  const comparadores = {
+    nome: (a,b) => clientePrincipalEAdversa(a,clientes).nomeCliente.localeCompare(clientePrincipalEAdversa(b,clientes).nomeCliente,"pt-BR"),
+    cliente: (a,b) => (clienteDe(a)?.nome||"").localeCompare(clienteDe(b)?.nome||"","pt-BR"),
+    acao: (a,b) => (CC[a.classificacao]?.label||a.classificacao||"").localeCompare(CC[b.classificacao]?.label||b.classificacao||"","pt-BR"),
+    // itens com prazo aparecem primeiro (ordenados pela data mais próxima); sem prazo ficam por último
+    prazo: (a,b) => { if(a.prazo && b.prazo) return a.prazo.localeCompare(b.prazo); if(a.prazo) return -1; if(b.prazo) return 1; return 0; },
+    ultimoMov: (a,b) => ultimoMovDe(b).localeCompare(ultimoMovDe(a)), // mais recente primeiro por padrão
+    status: (a,b) => (SC[normalizarStatus(a.status)]?.label||"").localeCompare(SC[normalizarStatus(b.status)]?.label||"","pt-BR"),
+  };
+  const alternarOrdenacao = campo => {
+    setOrdenacao(o => o.campo===campo ? {campo, direcao: o.direcao==="asc"?"desc":"asc"} : {campo, direcao:"asc"});
+  };
+  const listaOrdenada = useMemo(()=>{
+    if(!ordenacao.campo || !comparadores[ordenacao.campo]) return lista;
+    const arr = [...lista].sort(comparadores[ordenacao.campo]);
+    if(ordenacao.direcao==="desc") arr.reverse();
+    return arr;
+  },[lista, ordenacao, clientes]);
+
   const salvar=form=>{
     const salvo = form.id ? form : {...form,id:Date.now(),andamentos:[],documentos:[]};
     setProcessos(ps=>form.id?ps.map(p=>p.id===form.id?form:p):[...ps,salvo]);
@@ -2744,10 +2766,17 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       )}
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2.4fr 1.4fr 1.4fr .8fr .5fr",padding:"11px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:14}}>
-          {["Processo","Cliente","Ação / Foro","Últ. mov.","Status"].map(h=><span key={h} style={hdr}>{h}</span>)}
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1.1fr 1.1fr .85fr .95fr .6fr",padding:"11px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:14}}>
+          {[["nome","Processo"],["cliente","Cliente"],["acao","Ação / Foro"],["prazo","Prazo"],["ultimoMov","Últ. mov."],["status","Status"]].map(([campo,label])=>(
+            <span key={campo} onClick={()=>alternarOrdenacao(campo)} style={{...hdr,cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:4}}>
+              {label}
+              <span style={{fontSize:9,color: ordenacao.campo===campo ? "var(--accent)" : "var(--border3)"}}>
+                {ordenacao.campo===campo ? (ordenacao.direcao==="asc"?"▲":"▼") : "▲"}
+              </span>
+            </span>
+          ))}
         </div>
-        {lista.length===0?<div style={{padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum processo encontrado.</div>:lista.map((p,i)=>{
+        {listaOrdenada.length===0?<div style={{padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum processo encontrado.</div>:listaOrdenada.map((p,i)=>{
           const urg=isUrgProc(p),dias=p.prazo?diasRest(p.prazo):0;
           const andOrd=[...(p.andamentos||[])].sort((a,b)=>b.data.localeCompare(a.data));
           const ultimoAto=andOrd[0];
@@ -2755,13 +2784,13 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           const pp=p.prazoProcessual;
           const cli = clienteDe(p);
           return(
-            <div key={p.id} className="proc-row" style={{borderBottom:i<lista.length-1?"1px solid var(--border1)":"none",background:selecionados.has(p.id)?"var(--accent-light)":"transparent",display:"flex",alignItems:"stretch",position:"relative",transition:"background .12s"}}>
+            <div key={p.id} className="proc-row" style={{borderBottom:i<listaOrdenada.length-1?"1px solid var(--border1)":"none",background:selecionados.has(p.id)?"var(--accent-light)":"transparent",display:"flex",alignItems:"stretch",position:"relative",transition:"background .12s"}}>
               {modoSelecao&&(
                 <div style={{display:"flex",alignItems:"center",padding:"0 2px 0 16px"}}>
                   <input type="checkbox" checked={selecionados.has(p.id)} onChange={()=>toggleSelecionado(p.id)} style={{width:16,height:16,cursor:"pointer"}}/>
                 </div>
               )}
-              <div style={{flex:1,display:"grid",gridTemplateColumns:"2.4fr 1.4fr 1.4fr .8fr .5fr",padding:"14px 18px",alignItems:"center",gap:14,cursor:"pointer"}} onClick={()=>setSelected(p)}>
+              <div style={{flex:1,display:"grid",gridTemplateColumns:"2fr 1.1fr 1.1fr .85fr .95fr .6fr",padding:"14px 18px",alignItems:"center",gap:14,cursor:"pointer"}} onClick={()=>setSelected(p)}>
                 <div style={{minWidth:0}}>
                   {(()=>{
                     const {nomeCliente, adversa} = clientePrincipalEAdversa(p, clientes);
@@ -2787,13 +2816,18 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
                   {p.responsavel&&<p style={{fontSize:10.5,color:"var(--text3)",margin:"2px 0 0"}}>👤 {p.responsavel}</p>}
                 </div>
                 <div style={{minWidth:0}}>
+                  {p.prazo?(
+                    <p style={{fontSize:11.5,color:urg?"var(--red)":"var(--text1)",margin:0,fontWeight:urg?700:500}}>⏱ {fmtData(p.prazo)}</p>
+                  ):<span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
+                  {p.prazo&&p.prazoAto&&<p style={{fontSize:10,color:"var(--text2)",margin:"2px 0 0",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.prazoAto}</p>}
+                </div>
+                <div style={{minWidth:0}}>
                   {ultimoAto?(
                     <React.Fragment>
                       <p style={{fontSize:11.5,color:"var(--text1)",margin:0,fontWeight:500}}>{fmtData(ultimoAto.data)}</p>
                       <p style={{fontSize:10,color:"var(--text3)",margin:"2px 0 0",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ultimoAto.desc}</p>
                     </React.Fragment>
                   ):<span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
-                  {p.prazo&&<p style={{fontSize:10.5,color:urg?"var(--red)":"var(--text2)",margin:"4px 0 0",fontWeight:urg?700:400}}>⏱ {p.prazoAto?p.prazoAto+" — ":""}{fmtData(p.prazo)}</p>}
                 </div>
                 <div style={{display:"flex",alignItems:"center"}}>
                   {(()=>{
