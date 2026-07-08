@@ -4051,18 +4051,18 @@ Use string vazia quando a informação não existir. Nunca invente dados.`,
   const confirmar = () => {
     const escolhidos = resultado.filter(r=>r._selecionado);
     let novosClientes = [...clientes];
-    const novosProcessos = escolhidos.map(r=>{
+    const novosProcessos = escolhidos.map((r,i)=>{
       let clienteId = null;
       if(r.autor){
         const existente = novosClientes.find(c=>c.nome.toLowerCase()===r.autor.toLowerCase());
         if(existente) clienteId = existente.id;
         else {
-          clienteId = Date.now()+Math.random();
+          clienteId = Date.now()+i*7+Math.floor(Math.random()*1000);
           novosClientes.push({id:clienteId, nome:r.autor, cpf:"", email:"", telefone:"", endereco:"", obs:"Importado via relatório."});
         }
       }
       return {
-        id: Date.now()+Math.random(), clienteId, numero:r.numero||"", tipo:"judicial", classificacao:"",
+        id: Date.now()+i*13+Math.floor(Math.random()*1000), clienteId, numero:r.numero||"", tipo:"judicial", classificacao:"",
         autor:r.autor||"", reu:r.reu||"", vara:r.vara||"", responsavel:"", status:"em_andamento", prazo:"",
         debito:null, assunto:r.assunto||"", valorCausa:r.valorCausa||"", andamentos:[], documentos:[], checklist:{},
         obs:"Importado via relatório.",
@@ -4268,12 +4268,12 @@ function AppPrincipal({user}){
       let agendaAtualAposMerge = null;
       setAgenda(ag => {
         let atualizada = [...ag];
-        eventosGoogle.forEach(ev => {
+        eventosGoogle.forEach((ev, i) => {
           const convertido = eventoGoogleParaCompromisso(ev);
           if(!convertido) return;
           const idx = atualizada.findIndex(c => c.googleEventId === ev.id);
           if(idx >= 0) atualizada[idx] = { ...atualizada[idx], ...convertido, id: atualizada[idx].id };
-          else atualizada.push({ ...convertido, id: Date.now()+Math.random() });
+          else atualizada.push({ ...convertido, id: Date.now()+i*11+Math.floor(Math.random()*1000) });
         });
         agendaAtualAposMerge = atualizada;
         return atualizada;
