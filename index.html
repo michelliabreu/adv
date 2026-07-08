@@ -3874,6 +3874,7 @@ function AppPrincipal({user}){
   const uidUser = user.id;
   const [carregandoDados, setCarregandoDados] = useState(true);
   const [erroCarregamento, setErroCarregamento] = useState("");
+  const [avisoTabelasFaltando, setAvisoTabelasFaltando] = useState([]);
   const [pagina, setPagina] = useState("dashboard");
   const [processos, setProcessos] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -3898,9 +3899,21 @@ function AppPrincipal({user}){
       if(!sb){ setErroCarregamento(sbErroInicial||"Sem conexão com o banco."); setCarregandoDados(false); return; }
       try {
         const tabelas = ["processos","clientes","parcelas","tarefas","agenda","equipe","intimacoes"];
-        const resultados = await Promise.all(tabelas.map(t=>sb.from(t).select("*").eq("user_id", uidUser)));
-        const algumErro = resultados.find(r=>r.error);
-        if(algumErro?.error) throw algumErro.error;
+        // Cada tabela é carregada de forma independente: se uma tabela ainda não existir no
+        // Supabase (ex: "intimacoes" não criada), o sistema não trava inteiro — só aquela
+        // parte fica vazia, e um aviso aparece no rodapé da barra lateral.
+        const resultados = await Promise.all(tabelas.map(async t=>{
+          try {
+            const r = await sb.from(t).select("*").eq("user_id", uidUser);
+            if(r.error) throw r.error;
+            return r;
+          } catch(e){
+            console.warn(`Aviso: não foi possível carregar a tabela "${t}" (${e.message||e}). Usando lista vazia.`);
+            return { data: [], error: null, _tabelaFaltando: t };
+          }
+        }));
+        const tabelasFaltando = resultados.filter(r=>r._tabelaFaltando).map(r=>r._tabelaFaltando);
+        if(tabelasFaltando.length) setAvisoTabelasFaltando(tabelasFaltando);
         if(!ativo) return;
         const [rProc, rCli, rParc, rTar, rAg, rEq, rInt] = resultados;
         const parseCampo = (v, fallback) => { if(v===undefined||v===null) return fallback; if(typeof v==="string"){ try { return JSON.parse(v); } catch(_) { return fallback; } } return v; };
@@ -4004,6 +4017,11 @@ function AppPrincipal({user}){
           </div>
         ))}
         <div style={{marginTop:"auto",paddingTop:14,borderTop:"1px solid rgba(255,255,255,.1)"}}>
+          {avisoTabelasFaltando.length>0 && (
+            <p style={{fontSize:9.5,color:"#F5CE85",margin:"0 8px 8px",lineHeight:1.4}}>
+              ⚠ Tabela(s) não encontradas no Supabase: {avisoTabelasFaltando.join(", ")}. Essas áreas ficam vazias até a tabela ser criada.
+            </p>
+          )}
           <p style={{fontSize:10,color:"rgba(255,255,255,.4)",margin:"0 8px 4px"}}>
             {sincStatus==="salvando"?"Salvando…":sincStatus==="salvo"?"✓ Salvo":sincStatus.startsWith("erro")?`⚠ ${sincStatus.slice(5)}`:"Sincronizado"}
           </p>
