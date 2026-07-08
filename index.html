@@ -3503,12 +3503,93 @@ function ModalFormTarefa({tarefa, processos, clientes, equipe, onSave, onClose})
   );
 }
 
+function CardTarefaKanban({t, processos, equipe, atrasada, onAbrirProcesso, onEditar, onArquivar, onExcluir, onDragStart}){
+  const pCfg = PRIORIDADE_CFG[t.prioridade]||PRIORIDADE_CFG.media;
+  const respNome = id => (equipe||[]).find(m=>String(m.id)===String(id))?.nome || "";
+  const procNum = id => processos.find(p=>String(p.id)===String(id))?.numero || "";
+  return (
+    <div
+      draggable
+      onDragStart={e=>onDragStart(e, t.id)}
+      style={{background:"#fff",border:`1px solid ${atrasada?"#F3B8B8":"var(--border1)"}`,borderRadius:8,padding:"11px 12px",marginBottom:8,cursor:"grab",boxShadow:"0 1px 2px rgba(15,17,23,.04)"}}
+    >
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,marginBottom:6}}>
+        <p style={{fontSize:12.5,fontWeight:600,margin:0,lineHeight:1.35}}>{t.titulo}</p>
+        <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
+      </div>
+      {t.origemPrazoProcId && <div style={{marginBottom:6}}><Pill bg="var(--accent-light)" color="var(--accent)" label="Prazo do processo" sm/></div>}
+      <div style={{display:"flex",flexDirection:"column",gap:3,fontSize:10.5,color:"var(--text2)",marginBottom:8}}>
+        {t.procId && <span onClick={()=>{const p=processos.find(x=>String(x.id)===String(t.procId));if(p)onAbrirProcesso(p);}} style={{cursor:"pointer",textDecoration:"underline"}}>📋 {procNum(t.procId)}</span>}
+        {t.responsavelId && <span>👤 {respNome(t.responsavelId)}</span>}
+        {t.prazo && <span style={{color:atrasada?"var(--red)":"var(--text2)",fontWeight:atrasada?700:400}}>📅 {fmtData(t.prazo)}{atrasada?` (${Math.abs(diasRest(t.prazo))}d atrasado)`:""}</span>}
+      </div>
+      <div style={{display:"flex",gap:6,borderTop:"1px solid var(--border1)",paddingTop:7}}>
+        <button onClick={()=>onEditar(t)} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"#fff",color:"var(--text2)",fontWeight:600}}>Editar</button>
+        {t.status==="concluido" && <button onClick={()=>onArquivar(t.id)} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"#fff",color:"var(--text2)",fontWeight:600}}>📦 Arquivar</button>}
+        <button onClick={()=>onExcluir(t.id)} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"none",background:"none",color:"var(--text3)",marginLeft:"auto"}}>🗑</button>
+      </div>
+    </div>
+  );
+}
+
+function KanbanTarefas({tarefas, processos, equipe, onAbrirProcesso, onEditar, onArquivar, onExcluir, onMudarStatus}){
+  const [colunaAlvo, setColunaAlvo] = useState(null);
+  const dragId = React.useRef(null);
+
+  const onDragStart = (e, id) => { dragId.current = id; e.dataTransfer.effectAllowed = "move"; };
+  const onDrop = (status) => {
+    if(dragId.current!=null) onMudarStatus(dragId.current, status);
+    dragId.current = null;
+    setColunaAlvo(null);
+  };
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,alignItems:"start"}}>
+      {STATUS_TAREFA_VALIDOS.map(statusKey=>{
+        const cfg = STATUS_TAREFA_CFG[statusKey];
+        const itens = tarefas.filter(t=>t.status===statusKey).sort((a,b)=>{
+          if(a.prazo && b.prazo) return a.prazo.localeCompare(b.prazo);
+          if(a.prazo) return -1;
+          if(b.prazo) return 1;
+          return 0;
+        });
+        const emAlvo = colunaAlvo===statusKey;
+        return (
+          <div
+            key={statusKey}
+            onDragOver={e=>{e.preventDefault();setColunaAlvo(statusKey);}}
+            onDragLeave={()=>setColunaAlvo(c=>c===statusKey?null:c)}
+            onDrop={e=>{e.preventDefault();onDrop(statusKey);}}
+            style={{background:emAlvo?"var(--accent-light)":"var(--bg2)",borderRadius:10,padding:"12px",minHeight:120,transition:"background .15s",border:emAlvo?"1px dashed var(--accent)":"1px dashed transparent"}}
+          >
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"0 2px"}}>
+              <span style={{width:8,height:8,borderRadius:"50%",background:cfg.dot}}/>
+              <span style={{fontSize:11.5,fontWeight:700,color:"var(--text1)",textTransform:"uppercase",letterSpacing:".4px"}}>{cfg.label}</span>
+              <span style={{fontSize:11,color:"var(--text2)",marginLeft:"auto"}}>{itens.length}</span>
+            </div>
+            {itens.length===0 ? (
+              <div style={{fontSize:11.5,color:"var(--text3)",textAlign:"center",padding:"20px 0"}}>Arraste um item para cá</div>
+            ) : itens.map(t=>{
+              const atrasada = t.prazo && t.status!=="concluido" && diasRest(t.prazo)<0;
+              return (
+                <CardTarefaKanban key={t.id} t={t} processos={processos} equipe={equipe} atrasada={atrasada}
+                  onAbrirProcesso={onAbrirProcesso} onEditar={onEditar} onArquivar={onArquivar} onExcluir={onExcluir} onDragStart={onDragStart}/>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbrirProcesso}){
   const [editando,setEditando] = useState(null);
   const [novo,setNovo] = useState(false);
   const [filtroStatus,setFiltroStatus] = useState("todos");
   const [filtroResp,setFiltroResp] = useState("");
   const [busca,setBusca] = useState("");
+  const [visao,setVisao] = useState("kanban");
 
   const ativas = (tarefas||[]).filter(t=>!t.arquivada);
   const lista = useMemo(()=>{
@@ -3547,12 +3628,19 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
           <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Prazos e Tarefas</h1>
           <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{ativas.length} item(ns) ativo(s)</p>
         </div>
-        <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo prazo/tarefa</button>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",background:"var(--bg2)",borderRadius:7,padding:3}}>
+            {[["kanban","▦ Kanban"],["lista","☰ Lista"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setVisao(v)} style={{padding:"6px 13px",fontSize:11.5,fontWeight:600,border:"none",borderRadius:5,cursor:"pointer",background:visao===v?"#fff":"transparent",color:visao===v?"var(--navy2)":"var(--text2)",boxShadow:visao===v?"0 1px 3px rgba(0,0,0,.1)":"none",whiteSpace:"nowrap"}}>{l}</button>
+            ))}
+          </div>
+          <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo prazo/tarefa</button>
+        </div>
       </div>
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:12}}>
         <div style={{display:"flex",gap:0}}>
           {[["todos","Todos"],...STATUS_TAREFA_VALIDOS.map(k=>[k,STATUS_TAREFA_CFG[k].label])].map(([v,l])=>(
-            <button key={v} onClick={()=>setFiltroStatus(v)} style={{background:"none",border:"none",borderBottom:filtroStatus===v?"2px solid var(--navy2)":"2px solid transparent",color:filtroStatus===v?"var(--navy2)":"var(--text2)",padding:"5px 12px 7px",fontSize:11,fontWeight:filtroStatus===v?700:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".5px",whiteSpace:"nowrap"}}>{l}</button>
+            <button key={v} onClick={()=>setFiltroStatus(v)} style={{background:"none",border:"none",borderBottom:filtroStatus===v?"2px solid var(--navy2)":"2px solid transparent",color:filtroStatus===v?"var(--navy2)":"var(--text2)",padding:"5px 12px 7px",fontSize:11,fontWeight:filtroStatus===v?700:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".5px",whiteSpace:"nowrap",opacity:visao==="kanban"?.4:1,pointerEvents:visao==="kanban"?"none":"auto"}}>{l}</button>
           ))}
         </div>
         <div style={{display:"flex",gap:8}}>
@@ -3563,37 +3651,53 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
           <input placeholder="Buscar…" value={busca} onChange={e=>setBusca(e.target.value)} style={{fontSize:12,padding:"6px 11px",borderRadius:5,border:"1px solid var(--border2)",width:160}}/>
         </div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {lista.length===0?(
-          <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum prazo ou tarefa encontrado.</div>
-        ):lista.map(t=>{
-          const atrasada = t.prazo && t.status!=="concluido" && diasRest(t.prazo)<0;
-          const pCfg = PRIORIDADE_CFG[t.prioridade]||PRIORIDADE_CFG.media;
-          const sCfg = STATUS_TAREFA_CFG[t.status]||STATUS_TAREFA_CFG.pendente;
-          return (
-            <div key={t.id} style={{background:"#fff",border:`1px solid ${atrasada?"#F3B8B8":"var(--border1)"}`,borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                  <p style={{fontSize:13,fontWeight:600,margin:0}}>{t.titulo}</p>
-                  <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
-                  {t.origemPrazoProcId && <Pill bg="var(--accent-light)" color="var(--accent)" label="Prazo do processo" sm/>}
+
+      {visao==="kanban" ? (
+        <KanbanTarefas
+          tarefas={useMemo(()=>{
+            const q = busca.toLowerCase();
+            return ativas.filter(t=>{
+              if(filtroResp && String(t.responsavelId)!==filtroResp) return false;
+              if(q && !t.titulo.toLowerCase().includes(q)) return false;
+              return true;
+            });
+          },[ativas,filtroResp,busca])}
+          processos={processos} equipe={equipe}
+          onAbrirProcesso={onAbrirProcesso} onEditar={setEditando} onArquivar={arquivar} onExcluir={excluir} onMudarStatus={mudarStatus}
+        />
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {lista.length===0?(
+            <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum prazo ou tarefa encontrado.</div>
+          ):lista.map(t=>{
+            const atrasada = t.prazo && t.status!=="concluido" && diasRest(t.prazo)<0;
+            const pCfg = PRIORIDADE_CFG[t.prioridade]||PRIORIDADE_CFG.media;
+            const sCfg = STATUS_TAREFA_CFG[t.status]||STATUS_TAREFA_CFG.pendente;
+            return (
+              <div key={t.id} style={{background:"#fff",border:`1px solid ${atrasada?"#F3B8B8":"var(--border1)"}`,borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                    <p style={{fontSize:13,fontWeight:600,margin:0}}>{t.titulo}</p>
+                    <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
+                    {t.origemPrazoProcId && <Pill bg="var(--accent-light)" color="var(--accent)" label="Prazo do processo" sm/>}
+                  </div>
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:11,color:"var(--text2)"}}>
+                    {t.procId && <span onClick={()=>{const p=processos.find(x=>String(x.id)===String(t.procId));if(p)onAbrirProcesso(p);}} style={{cursor:"pointer",textDecoration:"underline"}}>📋 {procNum(t.procId)}</span>}
+                    {t.responsavelId && <span>👤 {respNome(t.responsavelId)}</span>}
+                    {t.prazo && <span style={{color:atrasada?"var(--red)":"var(--text2)",fontWeight:atrasada?700:400}}>📅 {fmtData(t.prazo)}{atrasada?` (${Math.abs(diasRest(t.prazo))}d atrasado)`:""}</span>}
+                  </div>
                 </div>
-                <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:11,color:"var(--text2)"}}>
-                  {t.procId && <span onClick={()=>{const p=processos.find(x=>String(x.id)===String(t.procId));if(p)onAbrirProcesso(p);}} style={{cursor:"pointer",textDecoration:"underline"}}>📋 {procNum(t.procId)}</span>}
-                  {t.responsavelId && <span>👤 {respNome(t.responsavelId)}</span>}
-                  {t.prazo && <span style={{color:atrasada?"var(--red)":"var(--text2)",fontWeight:atrasada?700:400}}>📅 {fmtData(t.prazo)}{atrasada?` (${Math.abs(diasRest(t.prazo))}d atrasado)`:""}</span>}
-                </div>
+                <select value={t.status} onChange={e=>mudarStatus(t.id, e.target.value)} style={{fontSize:11,padding:"5px 9px",borderRadius:5,border:"1px solid var(--border2)",background:sCfg.bg,color:sCfg.color,fontWeight:600}}>
+                  {STATUS_TAREFA_VALIDOS.map(k=><option key={k} value={k}>{STATUS_TAREFA_CFG[k].label}</option>)}
+                </select>
+                <button onClick={()=>setEditando(t)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Editar</button>
+                {t.status==="concluido" && <button onClick={()=>arquivar(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>📦</button>}
+                <button onClick={()=>excluir(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:0}}>🗑</button>
               </div>
-              <select value={t.status} onChange={e=>mudarStatus(t.id, e.target.value)} style={{fontSize:11,padding:"5px 9px",borderRadius:5,border:"1px solid var(--border2)",background:sCfg.bg,color:sCfg.color,fontWeight:600}}>
-                {STATUS_TAREFA_VALIDOS.map(k=><option key={k} value={k}>{STATUS_TAREFA_CFG[k].label}</option>)}
-              </select>
-              <button onClick={()=>setEditando(t)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Editar</button>
-              {t.status==="concluido" && <button onClick={()=>arquivar(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>📦</button>}
-              <button onClick={()=>excluir(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:0}}>🗑</button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
       {(editando||novo)&&<ModalFormTarefa tarefa={editando} processos={processos} clientes={clientes} equipe={equipe||[]} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}}/>}
     </div>
   );
