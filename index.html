@@ -3750,14 +3750,35 @@ function ModalFormCompromisso({compromisso, processos, clientes, equipe, onSave,
   );
 }
 
-function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, onAbrirProcesso}){
+function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, tarefas, onAbrirProcesso, onIrParaTarefa}){
   const [editando,setEditando] = useState(null);
   const [novo,setNovo] = useState(false);
   const [filtroTipo,setFiltroTipo] = useState("todos");
 
+  // Problema/pedido: os prazos e tarefas com data também aparecem na Agenda, mesclados
+  // com os compromissos — marcados como "Prazo/Tarefa" e levando de volta à página de origem.
+  const itensDeTarefas = useMemo(()=>{
+    return (tarefas||[])
+      .filter(t=>!t.arquivada && t.status!=="concluido" && t.prazo)
+      .map(t=>({
+        id: `tarefa-${t.id}`,
+        titulo: t.titulo,
+        tipo: "prazo",
+        dataHora: `${t.prazo}T23:59`,
+        procId: t.procId || "",
+        local: "",
+        obs: "",
+        _origemTarefa: t,
+      }));
+  },[tarefas]);
+
+  const listaCombinada = useMemo(()=>{
+    return [...(agenda||[]), ...itensDeTarefas];
+  },[agenda, itensDeTarefas]);
+
   const lista = useMemo(()=>{
-    return (agenda||[]).filter(c=>filtroTipo==="todos"||c.tipo===filtroTipo).sort((a,b)=>new Date(a.dataHora)-new Date(b.dataHora));
-  },[agenda,filtroTipo]);
+    return listaCombinada.filter(c=>filtroTipo==="todos"||c.tipo===filtroTipo).sort((a,b)=>new Date(a.dataHora)-new Date(b.dataHora));
+  },[listaCombinada,filtroTipo]);
 
   const salvar = form => {
     setAgenda(ag=>form.id?ag.map(c=>c.id===form.id?form:c):[...ag,{...form,id:Date.now()}]);
@@ -3774,7 +3795,7 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, onAbrirPr
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16}}>
         <div>
           <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Agenda</h1>
-          <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{(agenda||[]).length} compromisso(s)</p>
+          <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{(agenda||[]).length} compromisso(s) · {itensDeTarefas.length} prazo(s)/tarefa(s) com data</p>
         </div>
         <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo compromisso</button>
       </div>
@@ -3790,23 +3811,30 @@ function PaginaAgenda({agenda, setAgenda, processos, clientes, equipe, onAbrirPr
           <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum compromisso encontrado.</div>
         ):lista.map(c=>{
           const cfg = TIPO_AGENDA_CFG[c.tipo]||TIPO_AGENDA_CFG.outro;
+          const deTarefa = !!c._origemTarefa;
           return (
-            <div key={c.id} style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+            <div key={c.id} style={{background:"#fff",border:`1px solid ${deTarefa?"#C5DCF2":"var(--border1)"}`,borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
               <div style={{width:70,flexShrink:0}}>
                 <p style={{fontSize:12.5,fontWeight:700,margin:0,color:"var(--navy)"}}>{fmtDataHoraCurta(c.dataHora)}</p>
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
                   <p style={{fontSize:13,fontWeight:600,margin:0}}>{c.titulo}</p>
-                  <Pill bg={cfg.bg} color={cfg.color} label={cfg.label} sm/>
+                  <Pill bg={cfg.bg} color={cfg.color} label={deTarefa?"Prazo/Tarefa":cfg.label} sm/>
                 </div>
                 <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:11,color:"var(--text2)"}}>
                   {c.procId&&<span onClick={()=>{const p=processos.find(x=>String(x.id)===String(c.procId));if(p)onAbrirProcesso(p);}} style={{cursor:"pointer",textDecoration:"underline"}}>📋 {procNum(c.procId)}</span>}
                   {c.local&&<span>📍 {c.local}</span>}
                 </div>
               </div>
-              <button onClick={()=>setEditando(c)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Editar</button>
-              <button onClick={()=>excluir(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:0}}>🗑</button>
+              {deTarefa ? (
+                <button onClick={()=>onIrParaTarefa&&onIrParaTarefa()} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Ver em Prazos e Tarefas</button>
+              ) : (
+                <>
+                  <button onClick={()=>setEditando(c)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Editar</button>
+                  <button onClick={()=>excluir(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:0}}>🗑</button>
+                </>
+              )}
             </div>
           );
         })}
@@ -4148,7 +4176,7 @@ function AppPrincipal({user}){
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso}/>}
-        {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso}/>}
+        {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} processos={processos}/>}
         {pagina==="relatorios" && <PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
         {pagina==="intimacoes" && <PaginaIntimacoes intimacoes={intimacoes} setIntimacoes={setIntimacoes} processos={processos} setProcessos={setProcessos} equipe={equipe} setTarefas={setTarefas} onAbrirProcesso={abrirProcesso}/>}
