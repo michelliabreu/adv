@@ -2784,6 +2784,9 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       const dias = diasRest(procAtualizado.prazo);
       const prioridade = dias<=3 ? "alta" : dias<=7 ? "media" : "baixa";
       if(existente){
+        // Se o prazo (data) mudou em relação ao que já estava salvo, é um novo ciclo de
+        // prazo — a tarefa deve voltar a ser "pendente" mesmo que a antiga já estivesse concluída.
+        const dataMudou = existente.prazo !== procAtualizado.prazo;
         return ts.map(t=>t.id===existente.id?{...t,
           titulo: procAtualizado.prazoAto || t.titulo,
           prazo: procAtualizado.prazo,
@@ -2791,6 +2794,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           procId: procAtualizado.id,
           clienteId: procAtualizado.clienteId || t.clienteId,
           arquivada: false,
+          status: dataMudou ? "pendente" : t.status,
         }:t);
       }
       return [...ts, {
