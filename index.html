@@ -1135,6 +1135,7 @@ function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUp
                   return (
                     <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",border:"1px solid var(--border1)",borderRadius:6,padding:"9px 12px",marginBottom:8}}>
                       <div>
+                        {cliente && <p style={{fontSize:13,fontWeight:800,color:"var(--navy)",margin:"0 0 3px",letterSpacing:"-.1px"}}>{cliente.nome}</p>}
                         <p style={{fontSize:12.5,fontWeight:600,margin:"0 0 4px"}}>{t.titulo}</p>
                         <Pill bg={cfg.bg} color={cfg.color} label={cfg.label} sm/>
                       </div>
@@ -1193,23 +1194,24 @@ function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUp
 }
 
 // ── Modal Form Processo (sem campo e-mail — fica no Cliente) ──
+function ParteLinha({parte, updParte, delParte, clientes}){
+  return (
+    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+      <input value={parte.nome} onChange={e=>updParte(parte.id,"nome",e.target.value)} placeholder="Nome completo" style={{...inp,flex:1,fontSize:12,padding:"6px 9px"}}/>
+      <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:parte.clienteId?"var(--accent)":"var(--text2)",fontWeight:parte.clienteId?600:400,whiteSpace:"nowrap",cursor:"pointer"}}>
+        <input type="checkbox" checked={!!parte.clienteId} onChange={e=>updParte(parte.id,"clienteId", e.target.checked ? true : null)} style={{width:14,height:14,cursor:"pointer"}}/>
+        É o cliente
+      </label>
+      <button type="button" onClick={()=>delParte(parte.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>
+    </div>
+  );
+}
 function PartesEditor({partes, setPartes, clientes}){
   const addParte = (polo) => setPartes(ps=>[...ps, {id:uid(), nome:"", polo, clienteId:null}]);
   const updParte = (id, campo, valor) => setPartes(ps=>ps.map(x=>x.id===id?{...x,[campo]:valor}:x));
   const delParte = (id) => setPartes(ps=>ps.filter(x=>x.id!==id));
   const autores = partes.filter(x=>x.polo==="autor");
   const reus = partes.filter(x=>x.polo==="reu");
-
-  const Linha = ({parte}) => (
-    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
-      <input value={parte.nome} onChange={e=>updParte(parte.id,"nome",e.target.value)} placeholder="Nome completo" style={{...inp,flex:1,fontSize:12,padding:"6px 9px"}}/>
-      <select value={parte.clienteId||""} onChange={e=>updParte(parte.id,"clienteId",e.target.value?parseInt(e.target.value):null)} style={{...inp,width:130,fontSize:11,padding:"6px 7px"}}>
-        <option value="">Não é cliente</option>
-        {[...clientes].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map(c=><option key={c.id} value={c.id}>{c.nome.length>18?c.nome.slice(0,18)+"…":c.nome}</option>)}
-      </select>
-      <button type="button" onClick={()=>delParte(parte.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:"0 4px",lineHeight:1}}>×</button>
-    </div>
-  );
 
   return (
     <div>
@@ -1218,17 +1220,38 @@ function PartesEditor({partes, setPartes, clientes}){
           <span style={{...lbl,margin:0}}>Polo ativo — Autor(es)/Requerente(s)</span>
           <button type="button" onClick={()=>addParte("autor")} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--accent)",fontWeight:600,whiteSpace:"nowrap"}}>+ Adicionar</button>
         </div>
-        {autores.length===0?<p style={{fontSize:11,color:"var(--text3)",margin:0}}>Nenhuma parte no polo ativo.</p>:autores.map(p=><Linha key={p.id} parte={p}/>)}
+        {autores.length===0?<p style={{fontSize:11,color:"var(--text3)",margin:0}}>Nenhuma parte no polo ativo.</p>:autores.map(p=><ParteLinha key={p.id} parte={p} updParte={updParte} delParte={delParte} clientes={clientes}/>)}
       </div>
       <div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
           <span style={{...lbl,margin:0}}>Polo passivo — Réu(s)/Requerido(s)</span>
           <button type="button" onClick={()=>addParte("reu")} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"none",color:"var(--accent)",fontWeight:600,whiteSpace:"nowrap"}}>+ Adicionar</button>
         </div>
-        {reus.length===0?<p style={{fontSize:11,color:"var(--text3)",margin:0}}>Nenhuma parte no polo passivo.</p>:reus.map(p=><Linha key={p.id} parte={p}/>)}
+        {reus.length===0?<p style={{fontSize:11,color:"var(--text3)",margin:0}}>Nenhuma parte no polo passivo.</p>:reus.map(p=><ParteLinha key={p.id} parte={p} updParte={updParte} delParte={delParte} clientes={clientes}/>)}
       </div>
     </div>
   );
+}
+// Resolve o(s) cliente(s) marcado(s) com o checkbox "É o cliente": sincroniza com um
+// cliente já cadastrado com o mesmo nome, ou cria um novo cliente automaticamente.
+function resolverClientesDasPartes(partes, clientesAtuais, setClientes){
+  if(!partes || !partes.length) return partes;
+  const clientesNovos = [];
+  const partesResolvidas = partes.map(parte => {
+    if(parte.clienteId === true){
+      const nomeNorm = (parte.nome||"").trim().toLowerCase();
+      if(!nomeNorm) return {...parte, clienteId:null};
+      const existente = clientesAtuais.find(c=>c.nome.trim().toLowerCase()===nomeNorm)
+        || clientesNovos.find(c=>c.nome.trim().toLowerCase()===nomeNorm);
+      if(existente) return {...parte, clienteId: existente.id};
+      const novoCliente = {id: Date.now()+clientesNovos.length*7+Math.floor(Math.random()*1000), nome: parte.nome.trim(), cpf:"", email:"", telefone:"", endereco:"", obs:"Criado automaticamente ao marcar como cliente em um processo."};
+      clientesNovos.push(novoCliente);
+      return {...parte, clienteId: novoCliente.id};
+    }
+    return parte;
+  });
+  if(clientesNovos.length && setClientes) setClientes(cs=>[...cs, ...clientesNovos]);
+  return partesResolvidas;
 }
 function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classificacoesCustom,onNovaClassificacao}){
   const e0={numero:"",tipo:"judicial",clienteId:"",autor:"",reu:"",vara:"",responsavel:"",status:"ativo",prazo:"",andamentos:[],documentos:[],partes:[]};
@@ -1238,15 +1261,11 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
   const [novaClassifTexto,setNovaClassifTexto]=useState("");
   const s=(k,v)=>setF(x=>({...x,[k]:v}));
   const setPartes = (updater) => setF(x=>({...x, partes: typeof updater==="function" ? updater(x.partes||[]) : updater}));
-  const onSelectCliente = (clienteId) => {
-    const cli = clientes.find(c=>c.id===parseInt(clienteId));
-    setF(x=>({...x,clienteId:clienteId?parseInt(clienteId):"",autor:cli?cli.nome:x.autor}));
-  };
   const ativarModoMultiplo = () => {
     if(!modoMultiplo && (!f.partes || f.partes.length===0)){
       const iniciais = [];
-      if(f.autor) iniciais.push({id:uid(), nome:f.autor, polo:"autor", clienteId: f.clienteId||null});
-      if(f.reu) iniciais.push({id:uid(), nome:f.reu, polo:"reu", clienteId:null});
+      if(f.autor) iniciais.push({id:uid(), nome:f.autor, polo:"autor", clienteId: f.autorEhCliente ? true : null});
+      if(f.reu) iniciais.push({id:uid(), nome:f.reu, polo:"reu", clienteId: f.reuEhCliente ? true : null});
       setF(x=>({...x, partes: iniciais}));
     }
     setModoMultiplo(true);
@@ -1256,17 +1275,6 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
       <div style={{background:"#fff",width:540,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
         <p style={{fontSize:15,fontWeight:700,margin:"0 0 18px",color:"var(--navy)"}}>{processo?"Editar processo":"Novo processo"}</p>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div>
-            <span style={lbl}>Cliente vinculado (CRM)</span>
-            <div style={{display:"flex",gap:8}}>
-              <select value={f.clienteId||""} onChange={e=>onSelectCliente(e.target.value)} style={{...inp,padding:"8px 8px"}}>
-                <option value="">Selecione um cliente cadastrado…</option>
-                {[...clientes].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR")).map(c=><option key={c.id} value={c.id}>{c.nome}{c.cpf?` — ${c.cpf}`:""}</option>)}
-              </select>
-              <button type="button" onClick={onNovoCliente} style={{...btnSec,whiteSpace:"nowrap",fontSize:11,padding:"8px 12px"}}>+ Cliente</button>
-            </div>
-            {!f.clienteId&&!modoMultiplo&&<p style={{fontSize:10.5,color:"var(--amber)",margin:"5px 0 0"}}>⚠ Vincule um cliente para habilitar e-mail e relatórios automáticos.</p>}
-          </div>
           <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
             <div><span style={lbl}>Número do processo</span><input value={f.numero||""} onChange={e=>{
               const novoNumero = e.target.value;
@@ -1298,10 +1306,28 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 <div style={{display:"flex",justifyContent:"flex-end"}}>
-                  <button type="button" onClick={()=>setF(x=>({...x,autor:x.reu,reu:x.autor}))} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"#fff",color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>⇄ Inverter Autor/Réu</button>
+                  <button type="button" onClick={()=>setF(x=>({...x,autor:x.reu,reu:x.autor,autorEhCliente:x.reuEhCliente,reuEhCliente:x.autorEhCliente}))} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"#fff",color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>⇄ Inverter Autor/Réu</button>
                 </div>
-                <div><span style={lbl}>Autor / Requerente</span><input value={f.autor||""} onChange={e=>s("autor",e.target.value)} style={inp}/></div>
-                <div><span style={lbl}>Réu / Requerido</span><input value={f.reu||""} onChange={e=>s("reu",e.target.value)} style={inp}/></div>
+                <div>
+                  <span style={lbl}>Autor / Requerente</span>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <input value={f.autor||""} onChange={e=>s("autor",e.target.value)} style={{...inp,flex:1}}/>
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:f.autorEhCliente?"var(--accent)":"var(--text2)",fontWeight:f.autorEhCliente?600:400,whiteSpace:"nowrap",cursor:"pointer"}}>
+                      <input type="checkbox" checked={!!f.autorEhCliente} onChange={e=>s("autorEhCliente",e.target.checked)} style={{width:14,height:14,cursor:"pointer"}}/>
+                      É o cliente
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <span style={lbl}>Réu / Requerido</span>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <input value={f.reu||""} onChange={e=>s("reu",e.target.value)} style={{...inp,flex:1}}/>
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:f.reuEhCliente?"var(--accent)":"var(--text2)",fontWeight:f.reuEhCliente?600:400,whiteSpace:"nowrap",cursor:"pointer"}}>
+                      <input type="checkbox" checked={!!f.reuEhCliente} onChange={e=>s("reuEhCliente",e.target.checked)} style={{width:14,height:14,cursor:"pointer"}}/>
+                      É o cliente
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -2042,7 +2068,7 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
     </div>
   );
 }
-function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes}){
+function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido}){
   const tarefasPendentes = (tarefas||[]).filter(t=>t.status!=="concluido");
   const tarefasAtrasadas = tarefasPendentes.filter(t=>t.prazo&&diasRest(t.prazo)<0);
   const hojeStr = hoje.toISOString().slice(0,10);
@@ -2093,7 +2119,7 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe
     if(t.procId){ const proc=processos.find(p=>String(p.id)===String(t.procId)); if(proc?.clienteId){ const c=clientes.find(x=>x.id===proc.clienteId); if(c) return c.nome; } }
     return null;
   };
-  const abrirTarefaDashboard = (t) => { if(t.procId){ const p=processos.find(x=>String(x.id)===String(t.procId)); if(p){ onAbrirProcesso(p); return; } } onIrPara("tarefas"); };
+  const abrirTarefaDashboard = (t) => onVerPrazoRapido(t);
 
   const compromissosHojeOrdenados = [...compromissosHoje].sort((a,b)=>new Date(a.dataHora)-new Date(b.dataHora));
 
@@ -2238,8 +2264,9 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe
             {prazosAbertos.slice(0,8).map((item,i)=>{
               const d=diasRest(item.data);
               const urgente = d<=3;
+              const tarefaVinculada = (tarefas||[]).find(t=>t.origemPrazoProcId===item.proc.id && !t.arquivada);
               return (
-                <div key={i} onClick={()=>onAbrirProcesso(item.proc)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<Math.min(prazosAbertos.length,8)-1?"1px solid var(--border1)":"none",cursor:"pointer"}}>
+                <div key={i} onClick={()=>onVerPrazoRapido(tarefaVinculada || {id:`proc-${item.proc.id}`, titulo:item.tipo, prazo:item.data, status:"pendente", procId:item.proc.id, clienteId:item.proc.clienteId})} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<Math.min(prazosAbertos.length,8)-1?"1px solid var(--border1)":"none",cursor:"pointer"}}>
                   <div style={{width:38,height:38,borderRadius:7,background:urgente?"var(--red-bg)":"var(--amber-bg)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     <span style={{fontSize:13,fontWeight:700,color:urgente?"var(--red)":"var(--amber)"}}>{d}d</span>
                   </div>
@@ -2544,10 +2571,12 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     setSelected(s=>s&&s.id===id?{...s,vinculo}:s);
   };
   const salvarPartes = (id, partes) => {
-    const autorFinal = nomesPorPolo({partes},"autor").join(" e ");
-    const reuFinal = nomesPorPolo({partes},"reu").join(" e ");
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p, partes, autor:autorFinal, reu:reuFinal}:p));
-    setSelected(s=>s&&s.id===id?{...s, partes, autor:autorFinal, reu:reuFinal}:s);
+    const partesResolvidas = resolverClientesDasPartes(partes, clientes, setClientes);
+    const parteCliente = partesResolvidas.find(x=>x.clienteId && x.clienteId!==true);
+    const autorFinal = nomesPorPolo({partes:partesResolvidas},"autor").join(" e ");
+    const reuFinal = nomesPorPolo({partes:partesResolvidas},"reu").join(" e ");
+    setProcessos(ps=>ps.map(p=>p.id===id?{...p, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:p.clienteId}:p));
+    setSelected(s=>s&&s.id===id?{...s, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:s.clienteId}:s);
   };
   const removerVinculo = (id) => {
     setProcessos(ps=>ps.map(p=>p.id===id?{...p,vinculo:null}:p));
@@ -2788,8 +2817,24 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   },[lista, ordenacao, clientes]);
 
   const salvar=form=>{
-    const salvo = form.id ? form : {...form,id:Date.now(),andamentos:[],documentos:[]};
-    setProcessos(ps=>form.id?ps.map(p=>p.id===form.id?form:p):[...ps,salvo]);
+    // Resolve o(s) marcador(es) "É o cliente" — tanto no modo de múltiplas partes
+    // quanto no modo simples (autor/reu) — sincronizando com cliente existente ou criando um novo.
+    let formResolvido = form;
+    if(form.partes && form.partes.length){
+      const partesResolvidas = resolverClientesDasPartes(form.partes, clientes, setClientes);
+      const parteCliente = partesResolvidas.find(x=>x.clienteId && x.clienteId!==true);
+      formResolvido = {...form, partes: partesResolvidas, clienteId: parteCliente ? parteCliente.clienteId : form.clienteId};
+    } else if(form.autorEhCliente || form.reuEhCliente){
+      const sintetico = [
+        {nome: form.autor, clienteId: form.autorEhCliente ? true : null},
+        {nome: form.reu, clienteId: form.reuEhCliente ? true : null},
+      ].filter(x=>x.nome && x.nome.trim());
+      const resolvido = resolverClientesDasPartes(sintetico, clientes, setClientes);
+      const parteCliente = resolvido.find(x=>x.clienteId && x.clienteId!==true);
+      formResolvido = {...form, clienteId: parteCliente ? parteCliente.clienteId : form.clienteId};
+    }
+    const salvo = formResolvido.id ? formResolvido : {...formResolvido,id:Date.now(),andamentos:[],documentos:[]};
+    setProcessos(ps=>formResolvido.id?ps.map(p=>p.id===formResolvido.id?formResolvido:p):[...ps,salvo]);
     sincronizarTarefaDoPrazo(salvo);
     setEditando(null);setNovo(false);
   };
@@ -3788,6 +3833,46 @@ function ModalFormEquipeInner({membro, onSave, onClose}){
   );
 }
 
+function ModalPrazoRapido({tarefa, processo, cliente, onClose, onAbrirProcessoCompleto, onConcluir}){
+  const [executando, setExecutando] = useState(false);
+  const naoCumprido = tarefa.status !== "concluido";
+  const dias = tarefa.prazo ? diasRest(tarefa.prazo) : null;
+  return (
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.5)",zIndex:450,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#fff",width:480,maxWidth:"100%",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+          <div>
+            {cliente && <p style={{fontSize:19,fontWeight:800,color:"var(--navy)",margin:"0 0 4px",letterSpacing:"-.2px"}}>{cliente.nome}</p>}
+            {processo && <p style={{fontSize:12,color:"var(--text2)",margin:0,fontFamily:"monospace"}}>{processo.numero}</p>}
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:0,lineHeight:1}}>×</button>
+        </div>
+
+        <p style={{fontSize:15,fontWeight:700,color:"var(--text1)",margin:"0 0 8px"}}>{tarefa.titulo}</p>
+
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+          {tarefa.prazo && (
+            <span style={{fontSize:12,fontWeight:naoCumprido?700:400,color:naoCumprido?"var(--red)":"var(--text2)"}}>
+              📅 {fmtData(tarefa.prazo)}
+              {naoCumprido && dias!==null && <span style={{marginLeft:6,fontWeight:400,color:"var(--text3)",fontSize:11}}>{dias<0?`atrasado há ${Math.abs(dias)}d`:dias===0?"vence hoje":`faltam ${dias}d`}</span>}
+            </span>
+          )}
+          <Pill bg={STATUS_TAREFA_CFG[tarefa.status]?.bg} color={STATUS_TAREFA_CFG[tarefa.status]?.color} label={STATUS_TAREFA_CFG[tarefa.status]?.label} sm/>
+        </div>
+
+        {tarefa.desc && <p style={{fontSize:12.5,color:"var(--text2)",margin:"0 0 14px",lineHeight:1.5}}>{tarefa.desc}</p>}
+
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          {processo && <button onClick={onAbrirProcessoCompleto} style={btnSec}>Abrir processo completo →</button>}
+          {naoCumprido && <button onClick={()=>{ onConcluir(tarefa.id); onClose(); }} style={{...btnSec,color:"var(--green)",borderColor:"#A8DDB8"}}>✓ Marcar concluída</button>}
+          {naoCumprido && <button onClick={()=>setExecutando(true)} style={btnPri}>✨ Executar com IA</button>}
+        </div>
+      </div>
+      {executando && <ModalExecutarTarefaIA tarefa={tarefa} processo={processo} cliente={cliente} onClose={()=>setExecutando(false)} onConcluir={id=>{onConcluir(id); onClose();}}/>}
+    </div>
+  );
+}
+
 function ModalExecutarTarefaIA({tarefa, processo, cliente, onClose, onConcluir}){
   const [textoAnexado, setTextoAnexado] = useState("");
   const [instrucoes, setInstrucoes] = useState("");
@@ -3965,7 +4050,7 @@ function ModalFormTarefa({tarefa, processos, clientes, equipe, onSave, onClose})
   );
 }
 
-function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onDragStart}){
+function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onVerRapido, onDragStart}){
   const pCfg = PRIORIDADE_CFG[t.prioridade]||PRIORIDADE_CFG.media;
   const respNome = id => (equipe||[]).find(m=>String(m.id)===String(id))?.nome || "";
   const procNum = id => processos.find(p=>String(p.id)===String(id))?.numero || "";
@@ -3982,10 +4067,12 @@ function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProc
       onDragStart={e=>onDragStart(e, t.id)}
       style={{background:"#fff",border:`1px solid ${atrasada?"#F3B8B8":"var(--border1)"}`,borderRadius:8,padding:"11px 12px",marginBottom:8,cursor:"grab",boxShadow:"0 1px 2px rgba(15,17,23,.04)"}}
     >
-      {nomeCliente && <p style={{fontSize:16,fontWeight:800,color:"var(--navy)",margin:"0 0 5px",letterSpacing:"-.2px"}}>{nomeCliente}</p>}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,marginBottom:6}}>
-        <p style={{fontSize:14.5,fontWeight:700,color:"var(--text1)",margin:0,lineHeight:1.3}}>{t.titulo}</p>
-        <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
+      <div onClick={()=>onVerRapido(t)} style={{cursor:"pointer"}}>
+        {nomeCliente && <p style={{fontSize:16,fontWeight:800,color:"var(--navy)",margin:"0 0 5px",letterSpacing:"-.2px"}}>{nomeCliente}</p>}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,marginBottom:6}}>
+          <p style={{fontSize:14.5,fontWeight:700,color:"var(--text1)",margin:0,lineHeight:1.3}}>{t.titulo}</p>
+          <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
+        </div>
       </div>
       {t.origemPrazoProcId && <div style={{marginBottom:6}}><Pill bg="var(--accent-light)" color="var(--accent)" label="Prazo do processo" sm/></div>}
       <div style={{display:"flex",flexDirection:"column",gap:3,fontSize:10.5,color:"var(--text2)",marginBottom:8}}>
@@ -4014,7 +4101,7 @@ function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProc
   );
 }
 
-function KanbanTarefas({tarefas, processos, clientes, equipe, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onMudarStatus}){
+function KanbanTarefas({tarefas, processos, clientes, equipe, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onVerRapido, onMudarStatus}){
   const [colunaAlvo, setColunaAlvo] = useState(null);
   const dragId = React.useRef(null);
 
@@ -4055,7 +4142,7 @@ function KanbanTarefas({tarefas, processos, clientes, equipe, onAbrirProcesso, o
               const atrasada = t.prazo && t.status!=="concluido" && diasRest(t.prazo)<0;
               return (
                 <CardTarefaKanban key={t.id} t={t} processos={processos} clientes={clientes} equipe={equipe} atrasada={atrasada}
-                  onAbrirProcesso={onAbrirProcesso} onEditar={onEditar} onArquivar={onArquivar} onExcluir={onExcluir} onExecutar={onExecutar} onDragStart={onDragStart}/>
+                  onAbrirProcesso={onAbrirProcesso} onEditar={onEditar} onArquivar={onArquivar} onExcluir={onExcluir} onExecutar={onExecutar} onVerRapido={onVerRapido} onDragStart={onDragStart}/>
               );
             })}
           </div>
@@ -4065,7 +4152,100 @@ function KanbanTarefas({tarefas, processos, clientes, equipe, onAbrirProcesso, o
   );
 }
 
-function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbrirProcesso}){
+function CardTarefaDetalhado({t, processos, clientes, equipe, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onVerRapido, onMudarStatus}){
+  const [menuAberto, setMenuAberto] = useState(false);
+  const pCfg = PRIORIDADE_CFG[t.prioridade]||PRIORIDADE_CFG.media;
+  const sCfg = STATUS_TAREFA_CFG[t.status]||STATUS_TAREFA_CFG.pendente;
+  const respNome = id => (equipe||[]).find(m=>String(m.id)===String(id))?.nome || "—";
+  const procNum = id => processos.find(p=>String(p.id)===String(id))?.numero || "—";
+  const nomeCliente = (()=>{
+    if(t.clienteId){ const c=(clientes||[]).find(x=>String(x.id)===String(t.clienteId)); if(c) return c.nome; }
+    if(t.procId){ const proc=processos.find(p=>String(p.id)===String(t.procId)); if(proc?.clienteId){ const c=(clientes||[]).find(x=>x.id===proc.clienteId); if(c) return c.nome; } }
+    return null;
+  })();
+  const iniciais = nomeCliente ? nomeCliente.trim().split(/\s+/).slice(0,2).map(p=>p[0]).join("").toUpperCase() : null;
+  const naoCumprido = t.status !== "concluido";
+  const dias = t.prazo ? diasRest(t.prazo) : null;
+  const atrasado = naoCumprido && dias!==null && dias<0;
+  const urgente = naoCumprido && dias!==null && dias>=0 && dias<=3;
+  const prazoBg = atrasado ? "var(--red-bg)" : urgente ? "var(--amber-bg)" : "var(--green-bg)";
+  const prazoCor = atrasado ? "var(--red)" : urgente ? "var(--amber)" : "var(--green)";
+
+  return (
+    <div style={{background:"#fff",borderRadius:10,border:"1px solid var(--border1)",borderLeft:`4px solid ${pCfg.color}`,overflow:"hidden",marginBottom:12}}>
+      <div style={{padding:"14px 18px 0"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:sCfg.color,textTransform:"uppercase",letterSpacing:".5px"}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:sCfg.dot,display:"inline-block"}}/>{sCfg.label}
+          </span>
+          <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label}/>
+        </div>
+        <div onClick={()=>onVerRapido(t)} style={{display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer"}}>
+          <div style={{width:52,height:52,borderRadius:10,background:pCfg.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:iniciais?16:20,fontWeight:800,color:pCfg.color}}>
+            {iniciais || "⚖"}
+          </div>
+          <div style={{minWidth:0}}>
+            {nomeCliente && <p style={{fontSize:13.5,color:"var(--text2)",fontWeight:500,margin:"0 0 2px"}}>{nomeCliente}</p>}
+            <p style={{fontSize:19,fontWeight:800,color:"var(--text1)",margin:0,letterSpacing:"-.2px",lineHeight:1.25}}>{t.titulo}</p>
+          </div>
+        </div>
+
+        <div style={{display:"flex",border:"1px solid var(--border1)",borderRadius:8,marginBottom:10,overflow:"hidden"}}>
+          <div style={{flex:1,padding:"10px 14px",borderRight:"1px solid var(--border1)",minWidth:0}}>
+            <p style={{fontSize:10,color:"var(--text3)",margin:"0 0 3px",display:"flex",alignItems:"center",gap:5}}>📄 Processo</p>
+            {t.procId ? (
+              <p onClick={()=>{const p=processos.find(x=>String(x.id)===String(t.procId));if(p)onAbrirProcesso(p);}} style={{fontSize:12,fontWeight:600,margin:0,cursor:"pointer",textDecoration:"underline",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{procNum(t.procId)}</p>
+            ) : <p style={{fontSize:12,fontWeight:600,margin:0,color:"var(--text3)"}}>—</p>}
+          </div>
+          <div style={{flex:1,padding:"10px 14px",borderRight:"1px solid var(--border1)",minWidth:0}}>
+            <p style={{fontSize:10,color:"var(--text3)",margin:"0 0 4px",display:"flex",alignItems:"center",gap:5}}>◇ Fase</p>
+            <Pill bg="var(--accent-light)" color="var(--accent)" label={t.origemPrazoProcId?"Prazo do processo":"Tarefa manual"} sm/>
+          </div>
+          <div style={{flex:1,padding:"10px 14px",minWidth:0}}>
+            <p style={{fontSize:10,color:"var(--text3)",margin:"0 0 3px",display:"flex",alignItems:"center",gap:5}}>👤 Responsável</p>
+            <p style={{fontSize:12,fontWeight:600,margin:0,color:t.responsavelId?"var(--text1)":"var(--text3)"}}>{respNome(t.responsavelId)}</p>
+          </div>
+        </div>
+
+        {t.prazo && (
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:prazoBg,borderRadius:8,padding:"10px 14px",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>📅</span>
+              <div>
+                <p style={{fontSize:10,color:"var(--text2)",margin:"0 0 1px"}}>Prazo</p>
+                <p style={{fontSize:13,fontWeight:700,margin:0,color:"var(--text1)"}}>{fmtData(t.prazo)}</p>
+              </div>
+            </div>
+            {naoCumprido && dias!==null && (
+              <span style={{display:"flex",alignItems:"center",gap:5,fontSize:12.5,fontWeight:700,color:prazoCor}}>
+                ⏱ {dias<0?`Atrasado há ${Math.abs(dias)} dias`:dias===0?"Vence hoje":`Faltam ${dias} dias`}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div style={{display:"flex",gap:8,padding:"0 18px 14px"}}>
+        {naoCumprido && <button onClick={()=>onExecutar(t)} style={{flex:1,fontSize:13,padding:"11px 0",cursor:"pointer",borderRadius:7,border:"none",background:"var(--navy)",color:"#fff",fontWeight:600}}>✨ Executar com IA</button>}
+        <button onClick={()=>onEditar(t)} style={{...btnSec,padding:"11px 16px",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>✎ Editar</button>
+        <div style={{position:"relative"}}>
+          <button onClick={()=>setMenuAberto(v=>!v)} style={{...btnSec,padding:"11px 14px"}}>⋯</button>
+          {menuAberto && (
+            <div onMouseLeave={()=>setMenuAberto(false)} style={{position:"absolute",right:0,bottom:"110%",background:"#fff",border:"1px solid var(--border1)",borderRadius:7,boxShadow:"0 8px 20px rgba(0,0,0,.12)",overflow:"hidden",zIndex:10,minWidth:160}}>
+              <select value={t.status} onChange={e=>{onMudarStatus(t.id, e.target.value); setMenuAberto(false);}} style={{width:"100%",fontSize:12,padding:"9px 12px",border:"none",borderBottom:"1px solid var(--border1)",background:"#fff",cursor:"pointer"}}>
+                {STATUS_TAREFA_VALIDOS.map(k=><option key={k} value={k}>{STATUS_TAREFA_CFG[k].label}</option>)}
+              </select>
+              {t.status==="concluido" && <div onClick={()=>{onArquivar(t.id);setMenuAberto(false);}} style={{padding:"9px 12px",fontSize:12,cursor:"pointer",color:"var(--text2)"}}>📦 Arquivar</div>}
+              <div onClick={()=>{onExcluir(t.id);setMenuAberto(false);}} style={{padding:"9px 12px",fontSize:12,cursor:"pointer",color:"var(--red)"}}>🗑 Excluir</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbrirProcesso, onVerPrazoRapido}){
   const [editando,setEditando] = useState(null);
   const [novo,setNovo] = useState(false);
   const [filtroStatus,setFiltroStatus] = useState("todos");
@@ -4147,53 +4327,19 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
             });
           },[ativas,filtroResp,busca])}
           processos={processos} clientes={clientes} equipe={equipe}
-          onAbrirProcesso={onAbrirProcesso} onEditar={setEditando} onArquivar={arquivar} onExcluir={excluir} onExecutar={setExecutandoTarefa} onMudarStatus={mudarStatus}
+          onAbrirProcesso={onAbrirProcesso} onEditar={setEditando} onArquivar={arquivar} onExcluir={excluir} onExecutar={setExecutandoTarefa} onVerRapido={onVerPrazoRapido} onMudarStatus={mudarStatus}
         />
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <div>
           {lista.length===0?(
             <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum prazo ou tarefa encontrado.</div>
-          ):lista.map(t=>{
-            const atrasada = t.prazo && t.status!=="concluido" && diasRest(t.prazo)<0;
-            const pCfg = PRIORIDADE_CFG[t.prioridade]||PRIORIDADE_CFG.media;
-            const sCfg = STATUS_TAREFA_CFG[t.status]||STATUS_TAREFA_CFG.pendente;
-            const naoCumprido = t.status !== "concluido";
-            const diasT = t.prazo ? diasRest(t.prazo) : null;
-            const nomeClienteLista = (()=>{
-              if(t.clienteId){ const c=(clientes||[]).find(x=>String(x.id)===String(t.clienteId)); if(c) return c.nome; }
-              if(t.procId){ const proc=processos.find(p=>String(p.id)===String(t.procId)); if(proc?.clienteId){ const c=(clientes||[]).find(x=>x.id===proc.clienteId); if(c) return c.nome; } }
-              return null;
-            })();
-            return (
-              <div key={t.id} style={{background:"#fff",border:`1px solid ${atrasada?"#F3B8B8":"var(--border1)"}`,borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
-                <div style={{flex:1,minWidth:0}}>
-                  {nomeClienteLista && <p style={{fontSize:16,fontWeight:800,color:"var(--navy)",margin:"0 0 4px",letterSpacing:"-.2px"}}>{nomeClienteLista}</p>}
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                    <p style={{fontSize:14.5,fontWeight:700,color:"var(--text1)",margin:0}}>{t.titulo}</p>
-                    <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
-                    {t.origemPrazoProcId && <Pill bg="var(--accent-light)" color="var(--accent)" label="Prazo do processo" sm/>}
-                  </div>
-                  <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"baseline",fontSize:11,color:"var(--text2)"}}>
-                    {t.procId && <span onClick={()=>{const p=processos.find(x=>String(x.id)===String(t.procId));if(p)onAbrirProcesso(p);}} style={{cursor:"pointer",textDecoration:"underline"}}>📋 {procNum(t.procId)}</span>}
-                    {t.responsavelId && <span>🧑‍💼 {respNome(t.responsavelId)}</span>}
-                    {t.prazo && (
-                      <span>
-                        <span style={{fontWeight:naoCumprido?700:400,color:naoCumprido?"var(--red)":"var(--text2)"}}>📅 {fmtData(t.prazo)}</span>
-                        {naoCumprido && diasT!==null && <span style={{marginLeft:6,fontSize:10,color:"var(--text3)"}}>{diasT<0?`atrasado há ${Math.abs(diasT)}d`:diasT===0?"vence hoje":`faltam ${diasT}d`}</span>}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {t.status!=="concluido" && <button onClick={()=>setExecutandoTarefa(t)} style={{fontSize:11,padding:"7px 14px",cursor:"pointer",borderRadius:6,border:"none",background:"var(--navy2)",color:"#fff",fontWeight:600,whiteSpace:"nowrap"}}>✨ Executar com IA</button>}
-                <select value={t.status} onChange={e=>mudarStatus(t.id, e.target.value)} style={{fontSize:11,padding:"5px 9px",borderRadius:5,border:"1px solid var(--border2)",background:sCfg.bg,color:sCfg.color,fontWeight:600}}>
-                  {STATUS_TAREFA_VALIDOS.map(k=><option key={k} value={k}>{STATUS_TAREFA_CFG[k].label}</option>)}
-                </select>
-                <button onClick={()=>setEditando(t)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Editar</button>
-                {t.status==="concluido" && <button onClick={()=>arquivar(t.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>📦</button>}
-                <button onClick={()=>excluir(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:15,padding:0}}>🗑</button>
-              </div>
-            );
-          })}
+          ):lista.map(t=>(
+            <CardTarefaDetalhado
+              key={t.id} t={t} processos={processos} clientes={clientes} equipe={equipe}
+              onAbrirProcesso={onAbrirProcesso} onEditar={setEditando} onArquivar={arquivar} onExcluir={excluir}
+              onExecutar={setExecutandoTarefa} onVerRapido={onVerPrazoRapido} onMudarStatus={mudarStatus}
+            />
+          ))}
         </div>
       )}
       {(editando||novo)&&<ModalFormTarefa tarefa={editando} processos={processos} clientes={clientes} equipe={equipe||[]} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}}/>}
@@ -4950,6 +5096,11 @@ function AppPrincipal({user}){
   React.useEffect(()=>{ autoSave("intimacoes", intimacoes); }, [intimacoes]);
 
   const abrirProcesso = (proc) => { setAbrirProcessoId(proc.id); setPagina("processos"); };
+
+  // Visualização rápida de prazo/tarefa: abre por cima da página atual, sem navegar,
+  // para que ao fechar a pessoa continue no Dashboard ou em Prazos e Tarefas.
+  const [prazoRapido, setPrazoRapido] = useState(null);
+  const concluirTarefaGlobal = (id) => setTarefas(ts=>ts.map(t=>t.id===id?{...t,status:"concluido"}:t));
   const irPara = (destino) => setPagina(destino);
 
   const NAV = [
@@ -5001,10 +5152,10 @@ function AppPrincipal({user}){
         </div>
       </div>
       <div style={{flex:1,overflow:"auto",padding:"24px 32px"}}>
-        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} agenda={agenda} equipe={equipe} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes}/>}
+        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} agenda={agenda} equipe={equipe} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)}/>}
-        {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso}/>}
+        {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos}/>}
         {pagina==="relatorios" && <PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
@@ -5012,6 +5163,18 @@ function AppPrincipal({user}){
         {pagina==="importacao" && <PaginaImportacao processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes}/>}
         {pagina==="equipe" && <PaginaEquipe equipe={equipe} setEquipe={setEquipe}/>}
       </div>
+      {prazoRapido && <ModalPrazoRapido
+        tarefa={prazoRapido}
+        processo={prazoRapido.procId ? processos.find(p=>String(p.id)===String(prazoRapido.procId)) : null}
+        cliente={(()=>{
+          if(prazoRapido.clienteId) return clientes.find(c=>String(c.id)===String(prazoRapido.clienteId));
+          if(prazoRapido.procId){ const proc=processos.find(p=>String(p.id)===String(prazoRapido.procId)); if(proc?.clienteId) return clientes.find(c=>c.id===proc.clienteId); }
+          return null;
+        })()}
+        onClose={()=>setPrazoRapido(null)}
+        onAbrirProcessoCompleto={()=>{ const p=processos.find(x=>String(x.id)===String(prazoRapido.procId)); if(p){ abrirProcesso(p); } setPrazoRapido(null); }}
+        onConcluir={concluirTarefaGlobal}
+      />}
     </div>
   );
 }
