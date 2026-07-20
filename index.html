@@ -2109,6 +2109,7 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
   );
 }
 function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido}){
+  const [mostrarUrgentes, setMostrarUrgentes] = useState(false);
   const tarefasPendentes = (tarefas||[]).filter(t=>t.status!=="concluido");
   const tarefasAtrasadas = tarefasPendentes.filter(t=>t.prazo&&diasRest(t.prazo)<0);
   const hojeStr = hoje.toISOString().slice(0,10);
@@ -2230,7 +2231,21 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:12}}>
         <KpiCard label="Processos ativos" value={ativos.length} sub={`de ${processos.length} no total`} color="var(--navy2)" icon="📂" onClick={()=>onIrPara("processos")}/>
-        <KpiCard label="Prazos urgentes ≤7d" value={urgentes.length} sub="requer atenção imediata" color="var(--red)" icon="⚠" onClick={()=>onIrPara("processos")}/>
+        <div style={{position:"relative"}}>
+          <KpiCard label="Prazos urgentes ≤7d" value={prazosProximos7d.length} sub="requer atenção imediata" color="var(--red)" icon="⚠" onClick={()=>setMostrarUrgentes(v=>!v)}/>
+          {mostrarUrgentes && (
+            <div onMouseLeave={()=>setMostrarUrgentes(false)} style={{position:"absolute",top:"100%",left:0,right:0,marginTop:6,background:"#fff",border:"1px solid var(--border1)",borderRadius:10,boxShadow:"0 14px 32px rgba(28,26,23,.14)",zIndex:30,overflow:"hidden"}}>
+              {prazosProximos7d.length===0 ? (
+                <p style={{fontSize:12,color:"var(--text2)",padding:"14px 16px",margin:0}}>Nenhum prazo urgente nos próximos 7 dias. 🎉</p>
+              ) : prazosProximos7d.map((t,idx)=>(
+                <div key={t.id} onClick={()=>{onVerPrazoRapido(t);setMostrarUrgentes(false);}} style={{padding:"10px 16px",borderBottom:idx<prazosProximos7d.length-1?"1px solid var(--border1)":"none",cursor:"pointer"}}>
+                  <p style={{fontSize:12.5,fontWeight:600,color:"var(--text1)",margin:"0 0 2px"}}>{t.titulo}</p>
+                  <p style={{fontSize:11,color:"var(--text2)",margin:0}}>{clienteDeTarefa(t)||"—"} · {fmtData(t.prazo)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <KpiCard label="Clientes ativos" value={clientes.length} sub="cadastrados no CRM" color="var(--purple)" icon="👤" onClick={()=>onIrPara("clientes")}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12,marginBottom:16}}>
