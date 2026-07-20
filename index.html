@@ -3703,6 +3703,128 @@ function ModalFormEquipeInner({membro, onSave, onClose}){
   );
 }
 
+function ModalExecutarTarefaIA({tarefa, processo, cliente, onClose, onConcluir}){
+  const [textoAnexado, setTextoAnexado] = useState("");
+  const [instrucoes, setInstrucoes] = useState("");
+  const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [resultado, setResultado] = useState("");
+
+  const lerArquivo = (e) => {
+    const arquivo = e.target.files?.[0];
+    if(!arquivo) return;
+    if(!arquivo.type.startsWith("text/") && !arquivo.name.endsWith(".txt")){
+      setErro("Só é possível ler o texto de arquivos .txt diretamente aqui. Para PDF/Word, abra o arquivo, copie o texto e cole no campo abaixo.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setTextoAnexado(t => t ? t+"\n\n"+reader.result : String(reader.result));
+    reader.readAsText(arquivo);
+  };
+
+  const gerar = async () => {
+    setErro(""); setGerando(true); setResultado("");
+    try {
+      const contexto = [
+        `Ato/tarefa a realizar: ${tarefa.titulo}`,
+        processo ? `Processo: ${processo.numero} — ${processo.autor} vs. ${processo.reu}${processo.vara?` — ${processo.vara}`:""}` : "",
+        cliente ? `Cliente: ${cliente.nome}` : "",
+        tarefa.prazo ? `Prazo: ${fmtData(tarefa.prazo)}` : "",
+        tarefa.desc ? `Observações da tarefa: ${tarefa.desc}` : "",
+        instrucoes ? `Instruções adicionais da advogada: ${instrucoes}` : "",
+        textoAnexado ? `\n--- Conteúdo do documento anexado ---\n${textoAnexado}` : "",
+      ].filter(Boolean).join("\n");
+
+      let res;
+      try {
+        res = await fetch(IA_PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_KEY },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 4000,
+            system: `Você é um assistente jurídico que ajuda uma advogada brasileira a redigir a peça/documento necessário para cumprir um prazo ou executar uma tarefa. Use o contexto fornecido (processo, cliente, prazo, documento anexado e instruções) para produzir um rascunho completo, bem estruturado e no padrão da prática jurídica brasileira. Se faltar alguma informação essencial, sinalize isso claramente no início do texto em vez de inventar fatos. Este é um rascunho de apoio — a advogada revisará antes de protocolar.`,
+            messages: [{role:"user", content: contexto}]
+          })
+        });
+      } catch(e) {
+        throw new Error("Não foi possível conectar ao serviço de IA — verifique sua conexão com a internet.");
+      }
+      if(!res.ok){
+        let detalhe = "";
+        try { const errBody = await res.json(); detalhe = errBody?.error?.message || ""; } catch(_){}
+        throw new Error(`Erro HTTP ${res.status} ao chamar a IA.${detalhe?` Detalhe: ${detalhe}`:""}`);
+      }
+      const data = await res.json();
+      const txt = data.content?.find(b=>b.type==="text")?.text || "";
+      if(!txt) throw new Error("A IA retornou uma resposta vazia.");
+      setResultado(txt);
+    } catch(e) {
+      setErro(e.message || "Não foi possível gerar o rascunho.");
+    }
+    setGerando(false);
+  };
+
+  const copiar = () => {
+    if(navigator.clipboard && resultado) navigator.clipboard.writeText(resultado).catch(()=>{});
+  };
+
+  return (
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#fff",width:640,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",borderRadius:10,padding:"1.5rem",boxShadow:"0 20px 50px rgba(0,0,0,.25)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+          <div>
+            <p style={{fontSize:10,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".7px",margin:"0 0 4px",fontWeight:600}}>✨ Executar com IA</p>
+            <p style={{fontSize:15,fontWeight:700,margin:0,color:"var(--navy)"}}>{tarefa.titulo}</p>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:4}}>
+              {cliente && <span style={{fontSize:11.5,color:"var(--text2)"}}>👤 {cliente.nome}</span>}
+              {processo && <span style={{fontSize:11.5,color:"var(--text2)"}}>📋 {processo.numero}</span>}
+              {tarefa.prazo && <span style={{fontSize:11.5,color:"var(--text2)"}}>📅 {fmtData(tarefa.prazo)}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:0,lineHeight:1}}>×</button>
+        </div>
+
+        {!resultado && (
+          <>
+            <div style={{marginBottom:12}}>
+              <span style={lbl}>Anexar documento (opcional)</span>
+              <input type="file" accept=".txt,text/plain" onChange={lerArquivo} style={{fontSize:12,marginBottom:8}}/>
+              <p style={{fontSize:10.5,color:"var(--text3)",margin:"0 0 8px"}}>Só arquivos .txt são lidos automaticamente aqui. Para PDF/Word, abra o arquivo, copie o conteúdo e cole no campo abaixo.</p>
+              <textarea value={textoAnexado} onChange={e=>setTextoAnexado(e.target.value)} placeholder="Cole aqui o conteúdo do documento (petição inicial, intimação, contrato, etc.)…" style={{width:"100%",minHeight:120,fontSize:12,padding:"10px",borderRadius:6,border:"1px solid var(--border2)",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <span style={lbl}>Instruções adicionais (opcional)</span>
+              <textarea value={instrucoes} onChange={e=>setInstrucoes(e.target.value)} placeholder="Ex: focar na tese de excesso de execução, usar tom mais formal, etc." style={{width:"100%",minHeight:60,fontSize:12,padding:"10px",borderRadius:6,border:"1px solid var(--border2)",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            </div>
+            {erro && <p style={{fontSize:12,color:"var(--red)",marginBottom:12}}>{erro}</p>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={onClose} style={btnSec}>Fechar</button>
+              <button onClick={gerar} disabled={gerando} style={{...btnPri,opacity:gerando?.7:1}}>{gerando?"Gerando…":"✨ Gerar rascunho"}</button>
+            </div>
+          </>
+        )}
+
+        {resultado && (
+          <>
+            <div style={{background:"var(--accent-light)",border:"1px solid #C5DCF2",borderRadius:6,padding:"8px 12px",marginBottom:10,fontSize:11.5,color:"var(--navy2)"}}>
+              ✨ Rascunho gerado pela IA — revise com atenção antes de usar/protocolar.
+            </div>
+            <textarea value={resultado} onChange={e=>setResultado(e.target.value)} style={{width:"100%",minHeight:320,fontSize:12.5,padding:"12px",borderRadius:6,border:"1px solid var(--border2)",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.6,marginBottom:12}}/>
+            <div style={{display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
+              <button onClick={()=>setResultado("")} style={btnSec}>← Gerar de novo</button>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={copiar} style={btnSec}>📋 Copiar</button>
+                <button onClick={()=>{ onConcluir(tarefa.id); onClose(); }} style={{...btnPri,background:"var(--green)"}}>✓ Marcar tarefa como concluída</button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ModalFormTarefa({tarefa, processos, clientes, equipe, onSave, onClose}){
   const e0 = {titulo:"",responsavelId:"",procId:"",clienteId:"",status:"pendente",prioridade:"media",prazo:"",desc:""};
   const [f,setF] = useState(tarefa||e0);
@@ -3758,7 +3880,7 @@ function ModalFormTarefa({tarefa, processos, clientes, equipe, onSave, onClose})
   );
 }
 
-function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProcesso, onEditar, onArquivar, onExcluir, onDragStart}){
+function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onDragStart}){
   const pCfg = PRIORIDADE_CFG[t.prioridade]||PRIORIDADE_CFG.media;
   const respNome = id => (equipe||[]).find(m=>String(m.id)===String(id))?.nome || "";
   const procNum = id => processos.find(p=>String(p.id)===String(id))?.numero || "";
@@ -3795,6 +3917,9 @@ function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProc
           </div>
         )}
       </div>
+      {t.status!=="concluido" && (
+        <button onClick={()=>onExecutar(t)} style={{width:"100%",fontSize:11.5,padding:"7px 0",cursor:"pointer",borderRadius:6,border:"none",background:"var(--navy2)",color:"#fff",fontWeight:600,marginBottom:7}}>✨ Executar com IA</button>
+      )}
       <div style={{display:"flex",gap:6,borderTop:"1px solid var(--border1)",paddingTop:7}}>
         <button onClick={()=>onEditar(t)} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"#fff",color:"var(--text2)",fontWeight:600}}>Editar</button>
         {t.status==="concluido" && <button onClick={()=>onArquivar(t.id)} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"#fff",color:"var(--text2)",fontWeight:600}}>📦 Arquivar</button>}
@@ -3804,7 +3929,7 @@ function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProc
   );
 }
 
-function KanbanTarefas({tarefas, processos, clientes, equipe, onAbrirProcesso, onEditar, onArquivar, onExcluir, onMudarStatus}){
+function KanbanTarefas({tarefas, processos, clientes, equipe, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onMudarStatus}){
   const [colunaAlvo, setColunaAlvo] = useState(null);
   const dragId = React.useRef(null);
 
@@ -3845,7 +3970,7 @@ function KanbanTarefas({tarefas, processos, clientes, equipe, onAbrirProcesso, o
               const atrasada = t.prazo && t.status!=="concluido" && diasRest(t.prazo)<0;
               return (
                 <CardTarefaKanban key={t.id} t={t} processos={processos} clientes={clientes} equipe={equipe} atrasada={atrasada}
-                  onAbrirProcesso={onAbrirProcesso} onEditar={onEditar} onArquivar={onArquivar} onExcluir={onExcluir} onDragStart={onDragStart}/>
+                  onAbrirProcesso={onAbrirProcesso} onEditar={onEditar} onArquivar={onArquivar} onExcluir={onExcluir} onExecutar={onExecutar} onDragStart={onDragStart}/>
               );
             })}
           </div>
@@ -3862,6 +3987,7 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
   const [filtroResp,setFiltroResp] = useState("");
   const [busca,setBusca] = useState("");
   const [visao,setVisao] = useState("kanban");
+  const [executandoTarefa,setExecutandoTarefa] = useState(null);
 
   const ativas = (tarefas||[]).filter(t=>!t.arquivada);
   const lista = useMemo(()=>{
@@ -3936,7 +4062,7 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
             });
           },[ativas,filtroResp,busca])}
           processos={processos} clientes={clientes} equipe={equipe}
-          onAbrirProcesso={onAbrirProcesso} onEditar={setEditando} onArquivar={arquivar} onExcluir={excluir} onMudarStatus={mudarStatus}
+          onAbrirProcesso={onAbrirProcesso} onEditar={setEditando} onArquivar={arquivar} onExcluir={excluir} onExecutar={setExecutandoTarefa} onMudarStatus={mudarStatus}
         />
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -3973,6 +4099,7 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
                     )}
                   </div>
                 </div>
+                {t.status!=="concluido" && <button onClick={()=>setExecutandoTarefa(t)} style={{fontSize:11,padding:"7px 14px",cursor:"pointer",borderRadius:6,border:"none",background:"var(--navy2)",color:"#fff",fontWeight:600,whiteSpace:"nowrap"}}>✨ Executar com IA</button>}
                 <select value={t.status} onChange={e=>mudarStatus(t.id, e.target.value)} style={{fontSize:11,padding:"5px 9px",borderRadius:5,border:"1px solid var(--border2)",background:sCfg.bg,color:sCfg.color,fontWeight:600}}>
                   {STATUS_TAREFA_VALIDOS.map(k=><option key={k} value={k}>{STATUS_TAREFA_CFG[k].label}</option>)}
                 </select>
@@ -3985,6 +4112,17 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
         </div>
       )}
       {(editando||novo)&&<ModalFormTarefa tarefa={editando} processos={processos} clientes={clientes} equipe={equipe||[]} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}}/>}
+      {executandoTarefa&&<ModalExecutarTarefaIA
+        tarefa={executandoTarefa}
+        processo={executandoTarefa.procId ? processos.find(p=>String(p.id)===String(executandoTarefa.procId)) : null}
+        cliente={(()=>{
+          if(executandoTarefa.clienteId) return clientes.find(c=>String(c.id)===String(executandoTarefa.clienteId));
+          if(executandoTarefa.procId){ const proc=processos.find(p=>String(p.id)===String(executandoTarefa.procId)); if(proc?.clienteId) return clientes.find(c=>c.id===proc.clienteId); }
+          return null;
+        })()}
+        onClose={()=>setExecutandoTarefa(null)}
+        onConcluir={id=>mudarStatus(id,"concluido")}
+      />}
     </div>
   );
 }
