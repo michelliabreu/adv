@@ -2756,6 +2756,13 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const prazosVencidos=processos.filter(p=>p.prazoProcessual?.ativo&&p.prazoProcessual?.vencimento&&diasRest(p.prazoProcessual.vencimento)<0);
   const prazosUrgentes=processos.filter(p=>p.prazoProcessual?.ativo&&p.prazoProcessual?.vencimento&&diasRest(p.prazoProcessual.vencimento)>=0&&diasRest(p.prazoProcessual.vencimento)<=3);
 
+  // Cartões de indicadores no topo (unifica processo.prazo, já sincronizado com Prazos e Tarefas)
+  const processosNaoEncerrados = processos.filter(p=>normalizarStatus(p.status)!=="encerrado" && !p.arquivado);
+  const kpiPrazoVencido = processosNaoEncerrados.filter(p=>p.prazo && diasRest(p.prazo)<0).length;
+  const kpiPrazoProximo = processosNaoEncerrados.filter(p=>p.prazo && diasRest(p.prazo)>=0 && diasRest(p.prazo)<=7).length;
+  const kpiAguardandoProvidencia = processosNaoEncerrados.filter(p=>normalizarStatus(p.status)==="pendencia_documentos").length;
+  const kpiEmAndamento = processosNaoEncerrados.length;
+
   const statusGrupos=STATUS_VALIDOS.map(k=>({key:k,label:SC[k].label}));
   const cnt=s=>processos.filter(p=>normalizarStatus(p.status)===s).length;
 
@@ -2801,6 +2808,8 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     nome: (a,b) => clientePrincipalEAdversa(a,clientes).nomeCliente.localeCompare(clientePrincipalEAdversa(b,clientes).nomeCliente,"pt-BR"),
     cliente: (a,b) => (clienteDe(a)?.nome||"").localeCompare(clienteDe(b)?.nome||"","pt-BR"),
     acao: (a,b) => (CC[a.classificacao]?.label||a.classificacao||"").localeCompare(CC[b.classificacao]?.label||b.classificacao||"","pt-BR"),
+    proximaAcao: (a,b) => (a.prazoAto||"").localeCompare(b.prazoAto||"","pt-BR"),
+    responsavel: (a,b) => (a.responsavel||"").localeCompare(b.responsavel||"","pt-BR"),
     // itens com prazo aparecem primeiro (ordenados pela data mais próxima); sem prazo ficam por último
     prazo: (a,b) => { if(a.prazo && b.prazo) return a.prazo.localeCompare(b.prazo); if(a.prazo) return -1; if(b.prazo) return 1; return 0; },
     ultimoMov: (a,b) => ultimoMovDe(b).localeCompare(ultimoMovDe(a)), // mais recente primeiro por padrão
@@ -2850,6 +2859,27 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{processos.length} processo(s) cadastrados</p>
         </div>
         <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo processo</button>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
+        {[
+          {label:"Prazos vencidos", valor:kpiPrazoVencido, sub:"Requer ação imediata", icone:"⚠", cor:"var(--red)", bg:"var(--red-bg)", onClick:()=>setAba("em_andamento")},
+          {label:"Prazos próximos", valor:kpiPrazoProximo, sub:"Próximos 7 dias", icone:"📅", cor:"var(--amber)", bg:"var(--amber-bg)", onClick:()=>setAba("em_andamento")},
+          {label:"Aguardando providência", valor:kpiAguardandoProvidencia, sub:"Aguardando ação interna", icone:"⏱", cor:"#B45309", bg:"var(--amber-bg)", onClick:()=>setAba("pendencia_documentos")},
+          {label:"Em andamento", valor:kpiEmAndamento, sub:"Processos ativos", icone:"📂", cor:"var(--accent)", bg:"var(--accent-light)", onClick:()=>setAba("em_andamento")},
+        ].map((c,i)=>(
+          <div key={i} onClick={c.onClick} style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:c.onClick?"pointer":"default"}}>
+            <div>
+              <p style={{fontSize:12,color:"var(--text2)",margin:"0 0 4px"}}>{c.label}</p>
+              <p style={{fontSize:24,fontWeight:800,margin:"0 0 2px",color:"var(--text1)"}}>{c.valor}</p>
+              <p style={{fontSize:10.5,color:"var(--text3)",margin:0}}>{c.sub}</p>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+              <div style={{width:38,height:38,borderRadius:9,background:c.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{c.icone}</div>
+              {c.onClick && <span style={{color:"var(--text3)",fontSize:14}}>›</span>}
+            </div>
+          </div>
+        ))}
       </div>
 
       {prazosVencidos.length>0&&<div style={{background:"var(--red-bg)",borderLeft:"3px solid var(--red)",borderRadius:6,padding:"9px 14px",marginBottom:8,fontSize:12,color:"var(--red)"}}><strong style={{textTransform:"uppercase",letterSpacing:".5px",marginRight:8}}>⚠ Prazos processuais vencidos:</strong>{prazosVencidos.map(p=><span key={p.id} style={{marginRight:12}}>{p.numero.split("-")[0]}… — {p.prazoProcessual.proximoAto} ({Math.abs(diasRest(p.prazoProcessual.vencimento))}d atraso)</span>)}</div>}
@@ -2947,8 +2977,8 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       )}
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2fr 1.1fr 1.1fr .85fr .95fr .6fr",padding:"11px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:14}}>
-          {[["nome","Processo"],["cliente","Cliente"],["acao","Ação / Foro"],["prazo","Prazo"],["ultimoMov","Últ. mov."],["status","Status"]].map(([campo,label])=>(
+        <div style={{display:"grid",gridTemplateColumns:"1.7fr 1fr .8fr .95fr .8fr .85fr .6fr",padding:"11px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:12}}>
+          {[["nome","Processo"],["cliente","Cliente"],["acao","Tipo/Vara"],["proximaAcao","Próxima ação"],["prazo","Prazo"],["responsavel","Responsável"],["status","Status"]].map(([campo,label])=>(
             <span key={campo} onClick={()=>alternarOrdenacao(campo)} style={{...hdr,cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:4}}>
               {label}
               <span style={{fontSize:9,color: ordenacao.campo===campo ? "var(--accent)" : "var(--border3)"}}>
@@ -2971,7 +3001,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
                   <input type="checkbox" checked={selecionados.has(p.id)} onChange={()=>toggleSelecionado(p.id)} style={{width:16,height:16,cursor:"pointer"}}/>
                 </div>
               )}
-              <div style={{flex:1,display:"grid",gridTemplateColumns:"2fr 1.1fr 1.1fr .85fr .95fr .6fr",padding:"14px 18px",alignItems:"center",gap:14,cursor:"pointer"}} onClick={()=>setSelected(p)}>
+              <div style={{flex:1,display:"grid",gridTemplateColumns:"1.7fr 1fr .8fr .95fr .8fr .85fr .6fr",padding:"14px 18px",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>setSelected(p)}>
                 <div style={{minWidth:0}}>
                   {(()=>{
                     const {nomeCliente, adversa} = clientePrincipalEAdversa(p, clientes);
@@ -2988,27 +3018,36 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
                   </div>
                   {p.assunto&&<p style={{fontSize:11,color:"var(--text2)",margin:"4px 0 0",lineHeight:1.3}}>{p.assunto}</p>}
                 </div>
-                <div style={{minWidth:0}}>
-                  <p style={{fontSize:12.5,color:"var(--text1)",margin:0,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{cli?cli.nome:"—"}</p>
+                <div style={{minWidth:0,display:"flex",alignItems:"center",gap:8}}>
+                  {cli && <div style={{width:26,height:26,borderRadius:"50%",background:"var(--accent-light)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,flexShrink:0}}>{cli.nome.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase()}</div>}
+                  <p style={{fontSize:12.5,color:"var(--text1)",margin:0,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cli?cli.nome:"—"}</p>
                 </div>
                 <div style={{minWidth:0}}>
                   {p.classificacao&&<p style={{fontSize:12,color:"var(--text1)",margin:"0 0 2px",lineHeight:1.3}}>{CC[p.classificacao]?.label||p.classificacao}</p>}
-                  <p style={{fontSize:11,color:"var(--text2)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.vara||"—"}</p>
-                  {p.responsavel&&<p style={{fontSize:10.5,color:"var(--text3)",margin:"2px 0 0"}}>👤 {p.responsavel}</p>}
+                  <p style={{fontSize:10.5,color:"var(--text2)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.vara||"—"}</p>
+                </div>
+                <div style={{minWidth:0}}>
+                  {p.prazoAto ? (
+                    <p style={{fontSize:11.5,color:"var(--text1)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>📄 {p.prazoAto}</p>
+                  ) : ultimoAto ? (
+                    <p style={{fontSize:10.5,color:"var(--text3)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ultimoAto.desc}</p>
+                  ) : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
                 </div>
                 <div style={{minWidth:0}}>
                   {p.prazo?(
-                    <p style={{fontSize:11.5,color:urg?"var(--red)":"var(--text1)",margin:0,fontWeight:urg?700:500}}>⏱ {fmtData(p.prazo)}</p>
+                    <p style={{fontSize:11.5,color:urg?"var(--red)":"var(--text1)",margin:0,fontWeight:urg?700:500}}>{fmtData(p.prazo)}</p>
                   ):<span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
-                  {p.prazo&&p.prazoAto&&<p style={{fontSize:10,color:"var(--text2)",margin:"2px 0 0",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.prazoAto}</p>}
+                  {p.prazo&&(
+                    <p style={{fontSize:9.5,fontWeight:700,margin:"3px 0 0",padding:"1px 7px",borderRadius:10,display:"inline-block",
+                      background: dias<0?"var(--red-bg)":dias===0?"var(--amber-bg)":dias<=7?"var(--amber-bg)":"var(--bg2)",
+                      color: dias<0?"var(--red)":dias===0?"var(--amber)":dias<=7?"var(--amber)":"var(--text2)"}}>
+                      {dias<0?"VENCIDO":dias===0?"HOJE":`EM ${dias} DIAS`}
+                    </p>
+                  )}
                 </div>
-                <div style={{minWidth:0}}>
-                  {ultimoAto?(
-                    <React.Fragment>
-                      <p style={{fontSize:11.5,color:"var(--text1)",margin:0,fontWeight:500}}>{fmtData(ultimoAto.data)}</p>
-                      <p style={{fontSize:10,color:"var(--text3)",margin:"2px 0 0",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ultimoAto.desc}</p>
-                    </React.Fragment>
-                  ):<span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
+                <div style={{minWidth:0,display:"flex",alignItems:"center",gap:6}}>
+                  {p.responsavel && <div style={{width:24,height:24,borderRadius:"50%",background:"var(--bg3)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,flexShrink:0}}>{p.responsavel.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase()}</div>}
+                  <p style={{fontSize:11.5,color:"var(--text1)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.responsavel||"—"}</p>
                 </div>
                 <div style={{display:"flex",alignItems:"center"}}>
                   {(()=>{
