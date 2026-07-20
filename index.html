@@ -3775,9 +3775,9 @@ function CardTarefaKanban({t, processos, clientes, equipe, atrasada, onAbrirProc
       onDragStart={e=>onDragStart(e, t.id)}
       style={{background:"#fff",border:`1px solid ${atrasada?"#F3B8B8":"var(--border1)"}`,borderRadius:8,padding:"11px 12px",marginBottom:8,cursor:"grab",boxShadow:"0 1px 2px rgba(15,17,23,.04)"}}
     >
-      {nomeCliente && <p style={{fontSize:11,fontWeight:700,color:"var(--navy)",margin:"0 0 4px",textTransform:"uppercase",letterSpacing:".3px"}}>👤 {nomeCliente}</p>}
+      {nomeCliente && <p style={{fontSize:16,fontWeight:800,color:"var(--navy)",margin:"0 0 5px",letterSpacing:"-.2px"}}>{nomeCliente}</p>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6,marginBottom:6}}>
-        <p style={{fontSize:12.5,fontWeight:600,margin:0,lineHeight:1.35}}>{t.titulo}</p>
+        <p style={{fontSize:14.5,fontWeight:700,color:"var(--text1)",margin:0,lineHeight:1.3}}>{t.titulo}</p>
         <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
       </div>
       {t.origemPrazoProcId && <div style={{marginBottom:6}}><Pill bg="var(--accent-light)" color="var(--accent)" label="Prazo do processo" sm/></div>}
@@ -3956,9 +3956,9 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
             return (
               <div key={t.id} style={{background:"#fff",border:`1px solid ${atrasada?"#F3B8B8":"var(--border1)"}`,borderRadius:8,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
                 <div style={{flex:1,minWidth:0}}>
-                  {nomeClienteLista && <p style={{fontSize:11,fontWeight:700,color:"var(--navy)",margin:"0 0 3px",textTransform:"uppercase",letterSpacing:".3px"}}>👤 {nomeClienteLista}</p>}
+                  {nomeClienteLista && <p style={{fontSize:16,fontWeight:800,color:"var(--navy)",margin:"0 0 4px",letterSpacing:"-.2px"}}>{nomeClienteLista}</p>}
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                    <p style={{fontSize:13,fontWeight:600,margin:0}}>{t.titulo}</p>
+                    <p style={{fontSize:14.5,fontWeight:700,color:"var(--text1)",margin:0}}>{t.titulo}</p>
                     <Pill bg={pCfg.bg} color={pCfg.color} label={pCfg.label} sm/>
                     {t.origemPrazoProcId && <Pill bg="var(--accent-light)" color="var(--accent)" label="Prazo do processo" sm/>}
                   </div>
