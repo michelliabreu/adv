@@ -39,19 +39,19 @@ html,body{height:100%}
 .proc-row:hover{background:var(--bg2)!important}
 .proc-row:hover .proc-actions{opacity:1;pointer-events:auto}
 .proc-actions button:hover{background:var(--bg3)!important}
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F9FB;color:#0F1117;font-size:13px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#FBF9F6;color:#1C1A17;font-size:13px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 h1,h2,h3{font-family:'Inter',sans-serif;letter-spacing:-.02em;}
 :root{
-  --bg1:#ffffff;--bg2:#F6F7F9;--bg3:#F1F2F5;
-  --text1:#0F1117;--text2:#6B7280;--text3:#9CA3AF;
-  --border1:#E8E9ED;--border2:#DCDEE3;--border3:#C7CAD1;
-  --navy:#14161F;--navy2:#1E2130;--navy3:#2A2E42;
-  --accent:#5B5BD6;--accent-light:#EEEEFC;
-  --gold:#B7791F;
-  --green:#0E9F6E;--green-bg:#E9FBF3;
-  --red:#E02D3C;--red-bg:#FDECEE;
-  --amber:#D97706;--amber-bg:#FEF3DC;
-  --purple:#8B5CF6;--purple-bg:#F2EDFE;
+  --bg1:#FBF9F6;--bg2:#F4F0E9;--bg3:#ECE5D8;
+  --text1:#1C1A17;--text2:#6E655A;--text3:#A79C8C;
+  --border1:#E6DFD2;--border2:#D8CEBC;--border3:#C2B5A0;
+  --navy:#1A1815;--navy2:#242019;--navy3:#332C22;
+  --accent:#AD6656;--accent-light:#F3E7E2;
+  --gold:#A98553;
+  --green:#6E8F73;--green-bg:#EBF1EA;
+  --red:#B5544A;--red-bg:#F5E9E6;
+  --amber:#BE7A45;--amber-bg:#F6ECDF;
+  --purple:#AD8398;--purple-bg:#F3E9EE;
 }
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -222,14 +222,50 @@ const NODE_TYPES = {
   neutro:{label:"Neutro",bg:"#F1F2F4",border:"#9CA3AF",color:"#374151"},
 };
 
-const btnPri = {fontSize:12,padding:"8px 19px",cursor:"pointer",borderRadius:7,border:"none",background:"var(--navy2)",color:"#fff",fontWeight:500,letterSpacing:".2px",transition:"background .15s"};
-const btnSec = {fontSize:12,padding:"8px 19px",cursor:"pointer",borderRadius:7,border:"1px solid var(--border2)",background:"#fff",color:"var(--text1)",fontWeight:500,transition:"border-color .15s"};
+const btnPri = {fontSize:13,padding:"9px 20px",cursor:"pointer",borderRadius:7,border:"none",background:"var(--navy2)",color:"#fff",fontWeight:600,letterSpacing:".1px",transition:"background .15s"};
+const btnSec = {fontSize:13,padding:"9px 20px",cursor:"pointer",borderRadius:7,border:"1px solid var(--border2)",background:"#fff",color:"var(--text1)",fontWeight:600,transition:"border-color .15s"};
 const lbl = {fontSize:10.5,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",margin:"0 0 5px",display:"block",fontWeight:600};
 const inp = {width:"100%",fontSize:13,padding:"8px 11px",borderRadius:5,border:"1px solid var(--border2)",background:"#fff",color:"var(--text1)",boxSizing:"border-box"};
 
 const Pill = ({bg,color,label,sm}) => (
   <span style={{background:bg,color,borderRadius:4,padding:sm?"2px 8px":"3px 10px",fontSize:sm?10:11,fontWeight:600,letterSpacing:".2px",whiteSpace:"nowrap"}}>{label}</span>
 );
+
+// ── Ícones lineares (estilo Lucide) ────────────────────────
+// Substituem os emojis por ícones consistentes de uma única linguagem visual.
+const ICON_PATHS = {
+  house: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5 9.8V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.8"/></>,
+  folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>,
+  users: <><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M22.5 21v-2a4 4 0 0 0-3-3.87"/><path d="M16.5 3.13a4 4 0 0 1 0 7.75"/></>,
+  usersRound: <><path d="M18 21a6 6 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/><path d="M22.5 21a8 8 0 0 0-4.2-7.06"/><path d="M16.3 3.2a4 4 0 0 1 0 7.6"/></>,
+  checkSquare: <><path d="m9.5 12 2 2 4-4.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/></>,
+  calendar: <><rect x="3.5" y="4.5" width="17" height="16" rx="2.2"/><path d="M16 3v3M8 3v3M3.5 9.5h17"/></>,
+  wallet: <><path d="M3.5 6.8A2.3 2.3 0 0 1 5.8 4.5h12a1.7 1.7 0 0 1 1.7 1.7v1.6"/><path d="M3.5 6.8v11a2.2 2.2 0 0 0 2.2 2.2h12.6a1.7 1.7 0 0 0 1.7-1.7v-8.6a1.7 1.7 0 0 0-1.7-1.7H5.7a2.2 2.2 0 0 1-2.2-2.2Z"/><circle cx="16" cy="13" r="1.2"/></>,
+  barChart: <><path d="M4 20V10M12 20V4M20 20v-7"/></>,
+  bell: <><path d="M6 8.5a6 6 0 0 1 12 0c0 4.2 1.2 6 2 7H4c.8-1 2-2.8 2-7Z"/><path d="M10 19a2 2 0 0 0 4 0"/></>,
+  upload: <><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4.5 15.5V18a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-2.5"/></>,
+  logOut: <><path d="M9 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3"/><path d="m15.5 16 4-4-4-4"/><path d="M19 12H9"/></>,
+  search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></>,
+  filter: <path d="M4 5h16l-6 7.5V19l-4 2v-8.5Z"/>,
+  plus: <><path d="M12 5v14M5 12h14"/></>,
+  chevronUp: <path d="m6 14 6-6 6 6"/>,
+  chevronDown: <path d="m6 9 6 6 6-6"/>,
+  clipboard: <><rect x="6" y="4.5" width="12" height="16" rx="1.8"/><path d="M9 4.5V3.8A1.8 1.8 0 0 1 10.8 2h2.4A1.8 1.8 0 0 1 15 3.8v.7"/></>,
+  clock: <><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></>,
+  map: <><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14M15 6v14"/></>,
+  trash: <><path d="M4.5 6.5h15M9.5 6.5V4.8A1.3 1.3 0 0 1 10.8 3.5h2.4a1.3 1.3 0 0 1 1.3 1.3V6.5"/><path d="M6.5 6.5 7.3 19a1.8 1.8 0 0 0 1.8 1.7h5.8a1.8 1.8 0 0 0 1.8-1.7l.8-12.5"/></>,
+  alertTriangle: <><path d="M12 3.5 2 20.5h20Z"/><path d="M12 10v4M12 17.2v.1"/></>,
+  checkCircle: <><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/></>,
+};
+function Icon({name, size=16, color="currentColor", strokeWidth=1.8, style}){
+  const inner = ICON_PATHS[name];
+  if(!inner) return null;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,display:"inline-block",verticalAlign:"middle",...style}}>
+      {inner}
+    </svg>
+  );
+}
 function DebitoBadge({debito, compact}){
   if(!debito || !debito.valor) return null;
   if(compact){
@@ -2753,6 +2789,16 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     setSelected(s=>s&&s.id===procId?{...s,prazo,prazoAto:ato}:s);
   };
 
+  // Marca o prazo do processo como cumprido: limpa o prazo/ato do processo e conclui
+  // a tarefa vinculada (se houver), sem precisar abrir a ficha completa do processo.
+  const marcarPrazoCumprido = (procId) => {
+    setProcessos(ps=>ps.map(p=>p.id===procId?{...p, prazo:"", prazoAto:""}:p));
+    setSelected(s=>s&&s.id===procId?{...s, prazo:"", prazoAto:""}:s);
+    if(setTarefas){
+      setTarefas(ts=>ts.map(t=>t.origemPrazoProcId===procId?{...t,status:"concluido"}:t));
+    }
+  };
+
   const urgentes=processos.filter(isUrgProc);
   const prazosVencidos=processos.filter(p=>p.prazoProcessual?.ativo&&p.prazoProcessual?.vencimento&&diasRest(p.prazoProcessual.vencimento)<0);
   const prazosUrgentes=processos.filter(p=>p.prazoProcessual?.ativo&&p.prazoProcessual?.vencimento&&diasRest(p.prazoProcessual.vencimento)>=0&&diasRest(p.prazoProcessual.vencimento)<=3);
@@ -2848,61 +2894,65 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     sincronizarTarefaDoPrazo(salvo);
     setEditando(null);setNovo(false);
   };
-  const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
+  const hdr={fontSize:11,textTransform:"uppercase",letterSpacing:".5px",color:"var(--text2)",fontWeight:600};
   const btnLote={fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:5,border:"none",background:"rgba(255,255,255,.15)",color:"#fff",cursor:"pointer",whiteSpace:"nowrap"};
   const btnIcon={fontSize:13,width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",borderRadius:6,border:"1px solid var(--border1)",background:"#fff",padding:0,lineHeight:1};
 
   return(
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:18}}>
         <div>
-          <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Processos</h1>
-          <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{processos.length} processo(s) cadastrados</p>
+          <h1 style={{fontSize:24,fontWeight:700,color:"var(--text1)",margin:"0 0 4px",letterSpacing:"-.015em"}}>Processos</h1>
+          <p style={{fontSize:12,fontWeight:400,color:"var(--text2)",margin:0}}>{processos.length} processo(s) cadastrados</p>
         </div>
-        <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo processo</button>
+        <button onClick={()=>setNovo(true)} style={{...btnPri,display:"flex",alignItems:"center",gap:7}}><Icon name="plus" size={14} color="#fff"/>Novo processo</button>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
         {[
-          {label:"Prazos vencidos", valor:kpiPrazoVencido, sub:"Requer ação imediata", icone:"⚠", cor:"var(--red)", bg:"var(--red-bg)", onClick:()=>setAba("em_andamento")},
-          {label:"Prazos próximos", valor:kpiPrazoProximo, sub:"Próximos 7 dias", icone:"📅", cor:"var(--amber)", bg:"var(--amber-bg)", onClick:()=>setAba("em_andamento")},
-          {label:"Aguardando providência", valor:kpiAguardandoProvidencia, sub:"Aguardando ação interna", icone:"⏱", cor:"#B45309", bg:"var(--amber-bg)", onClick:()=>setAba("pendencia_documentos")},
-          {label:"Em andamento", valor:kpiEmAndamento, sub:"Processos ativos", icone:"📂", cor:"var(--accent)", bg:"var(--accent-light)", onClick:()=>setAba("em_andamento")},
+          {label:"Prazos vencidos", valor:kpiPrazoVencido, sub:"Requer ação imediata", icone:"alertTriangle", cor:"var(--red)", bg:"var(--red-bg)", onClick:()=>setAba("em_andamento")},
+          {label:"Prazos próximos", valor:kpiPrazoProximo, sub:"Próximos 7 dias", icone:"clock", cor:"var(--amber)", bg:"var(--amber-bg)", onClick:()=>setAba("em_andamento")},
+          {label:"Aguardando providência", valor:kpiAguardandoProvidencia, sub:"Aguardando ação interna", icone:"clock", cor:"var(--amber)", bg:"var(--amber-bg)", onClick:()=>setAba("pendencia_documentos")},
+          {label:"Em andamento", valor:kpiEmAndamento, sub:"Processos ativos", icone:"folder", cor:"var(--accent)", bg:"var(--accent-light)", onClick:()=>setAba("em_andamento")},
         ].map((c,i)=>(
-          <div key={i} onClick={c.onClick} style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:c.onClick?"pointer":"default"}}>
+          <div key={i} onClick={c.onClick} style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:11,padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:c.onClick?"pointer":"default",transition:"box-shadow .15s"}}>
             <div>
-              <p style={{fontSize:12,color:"var(--text2)",margin:"0 0 4px"}}>{c.label}</p>
-              <p style={{fontSize:24,fontWeight:800,margin:"0 0 2px",color:"var(--text1)"}}>{c.valor}</p>
-              <p style={{fontSize:10.5,color:"var(--text3)",margin:0}}>{c.sub}</p>
+              <p style={{fontSize:11,fontWeight:400,color:"var(--text2)",margin:"0 0 5px"}}>{c.label}</p>
+              <p style={{fontSize:25,fontWeight:700,margin:"0 0 3px",color:"var(--text1)",letterSpacing:"-.02em"}}>{c.valor}</p>
+              <p style={{fontSize:10.5,fontWeight:400,color:"var(--text3)",margin:0}}>{c.sub}</p>
             </div>
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-              <div style={{width:38,height:38,borderRadius:9,background:c.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{c.icone}</div>
-              {c.onClick && <span style={{color:"var(--text3)",fontSize:14}}>›</span>}
+              <div style={{width:38,height:38,borderRadius:9,background:c.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name={c.icone} size={17} color={c.cor}/></div>
+              {c.onClick && <Icon name="chevronDown" size={13} color="var(--text3)" style={{transform:"rotate(-90deg)"}}/>}
             </div>
           </div>
         ))}
       </div>
 
-      {prazosVencidos.length>0&&<div style={{background:"var(--red-bg)",borderLeft:"3px solid var(--red)",borderRadius:6,padding:"9px 14px",marginBottom:8,fontSize:12,color:"var(--red)"}}><strong style={{textTransform:"uppercase",letterSpacing:".5px",marginRight:8}}>⚠ Prazos processuais vencidos:</strong>{prazosVencidos.map(p=><span key={p.id} style={{marginRight:12}}>{p.numero.split("-")[0]}… — {p.prazoProcessual.proximoAto} ({Math.abs(diasRest(p.prazoProcessual.vencimento))}d atraso)</span>)}</div>}
-      {prazosUrgentes.length>0&&<div style={{background:"var(--amber-bg)",borderLeft:"3px solid var(--amber)",borderRadius:6,padding:"9px 14px",marginBottom:8,fontSize:12,color:"var(--amber)"}}><strong style={{textTransform:"uppercase",letterSpacing:".5px",marginRight:8}}>⏱ Prazos processuais próximos:</strong>{prazosUrgentes.map(p=><span key={p.id} style={{marginRight:12}}>{p.numero.split("-")[0]}… — {p.prazoProcessual.proximoAto} ({diasRest(p.prazoProcessual.vencimento)}d)</span>)}</div>}
+      {prazosVencidos.length>0&&<div style={{background:"var(--red-bg)",borderLeft:"3px solid var(--red)",borderRadius:6,padding:"9px 14px",marginBottom:8,fontSize:12,color:"var(--red)"}}><strong style={{textTransform:"uppercase",letterSpacing:".5px",marginRight:8}}>Prazos processuais vencidos:</strong>{prazosVencidos.map(p=><span key={p.id} style={{marginRight:12}}>{p.numero.split("-")[0]}… — {p.prazoProcessual.proximoAto} ({Math.abs(diasRest(p.prazoProcessual.vencimento))}d atraso)</span>)}</div>}
+      {prazosUrgentes.length>0&&<div style={{background:"var(--amber-bg)",borderLeft:"3px solid var(--amber)",borderRadius:6,padding:"9px 14px",marginBottom:8,fontSize:12,color:"var(--amber)"}}><strong style={{textTransform:"uppercase",letterSpacing:".5px",marginRight:8}}>Prazos processuais próximos:</strong>{prazosUrgentes.map(p=><span key={p.id} style={{marginRight:12}}>{p.numero.split("-")[0]}… — {p.prazoProcessual.proximoAto} ({diasRest(p.prazoProcessual.vencimento)}d)</span>)}</div>}
 
-      <div style={{background:"var(--accent-light)",border:"1px solid #C5DCF2",borderRadius:6,padding:"9px 14px",marginBottom:12,fontSize:12,color:"var(--navy2)",lineHeight:1.5}}>
-        ℹ️ A consulta automática ao DataJud é bloqueada pelo navegador (CORS). Use o botão <strong>"📋 Colar mov."</strong> em cada processo para atualizar manualmente colando o conteúdo copiado do site do tribunal.
+      <div style={{background:"var(--accent-light)",border:"1px solid #E4CDC5",borderRadius:6,padding:"9px 14px",marginBottom:12,fontSize:12,color:"var(--navy2)",lineHeight:1.5,display:"flex",gap:8,alignItems:"flex-start"}}>
+        <Icon name="alertTriangle" size={14} color="var(--accent)" style={{marginTop:2}}/>
+        <span>A consulta automática ao DataJud é bloqueada pelo navegador (CORS). Use o botão <strong>"Colar mov."</strong> em cada processo para atualizar manualmente colando o conteúdo copiado do site do tribunal.</span>
       </div>
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:filtrosAbertos?0:12}}>
         <div style={{display:"flex",gap:0,flexWrap:"wrap",borderRight:"1px solid var(--border1)",paddingRight:12}}>
           {statusGrupos.map(({key,label})=>(
-            <button key={key} onClick={()=>setAba(key)} style={{background:"none",border:"none",borderBottom:aba===key?"2px solid var(--navy2)":"2px solid transparent",color:aba===key?"var(--navy2)":"var(--text2)",padding:"5px 9px 7px",fontSize:10.5,fontWeight:aba===key?700:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{label} ({cnt(key)})</button>
+            <button key={key} onClick={()=>setAba(key)} style={{background:"none",border:"none",borderBottom:aba===key?"2px solid var(--accent)":"2px solid transparent",color:aba===key?"var(--text1)":"var(--text2)",padding:"5px 9px 7px",fontSize:11,fontWeight:aba===key?600:400,cursor:"pointer",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{label} ({cnt(key)})</button>
           ))}
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <input placeholder="Buscar…" value={busca} onChange={e=>setBusca(e.target.value)} style={{fontSize:12,padding:"6px 11px",borderRadius:5,border:"1px solid var(--border2)",background:"#fff",color:"var(--text1)",width:170}}/>
-          <button onClick={()=>setFiltrosAbertos(v=>!v)} style={{fontSize:11,padding:"6px 12px",cursor:"pointer",borderRadius:5,border:`1px solid ${filtrosAtivos>0?"var(--accent)":"var(--border2)"}`,background:filtrosAtivos>0?"var(--accent-light)":"#fff",color:filtrosAtivos>0?"var(--accent)":"var(--text2)",fontWeight:600,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}>
-            ⚙ Filtros{filtrosAtivos>0&&<span style={{background:"var(--accent)",color:"#fff",borderRadius:8,padding:"0 6px",fontSize:9.5}}>{filtrosAtivos}</span>}
+          <div style={{position:"relative"}}>
+            <Icon name="search" size={13} color="var(--text3)" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)"}}/>
+            <input placeholder="Buscar…" value={busca} onChange={e=>setBusca(e.target.value)} style={{fontSize:12,padding:"6px 11px 6px 28px",borderRadius:5,border:"1px solid var(--border2)",background:"#fff",color:"var(--text1)",width:170}}/>
+          </div>
+          <button onClick={()=>setFiltrosAbertos(v=>!v)} style={{fontSize:11,fontWeight:600,padding:"6px 12px",cursor:"pointer",borderRadius:5,border:`1px solid ${filtrosAtivos>0?"var(--accent)":"var(--border2)"}`,background:filtrosAtivos>0?"var(--accent-light)":"#fff",color:filtrosAtivos>0?"var(--accent)":"var(--text2)",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+            <Icon name="filter" size={13}/>Filtros{filtrosAtivos>0&&<span style={{background:"var(--accent)",color:"#fff",borderRadius:8,padding:"0 6px",fontSize:9.5}}>{filtrosAtivos}</span>}
           </button>
-          <button onClick={()=>{ if(modoSelecao) limparSelecao(); else setModoSelecao(true); }} style={{fontSize:11,padding:"6px 12px",cursor:"pointer",borderRadius:5,border:`1px solid ${modoSelecao?"var(--accent)":"var(--border2)"}`,background:modoSelecao?"var(--accent-light)":"#fff",color:modoSelecao?"var(--accent)":"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}}>
-            {modoSelecao?"✕ Cancelar":"☑ Selecionar"}
+          <button onClick={()=>{ if(modoSelecao) limparSelecao(); else setModoSelecao(true); }} style={{fontSize:11,fontWeight:600,padding:"6px 12px",cursor:"pointer",borderRadius:5,border:`1px solid ${modoSelecao?"var(--accent)":"var(--border2)"}`,background:modoSelecao?"var(--accent-light)":"#fff",color:modoSelecao?"var(--accent)":"var(--text2)",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+            <Icon name="checkSquare" size={13}/>{modoSelecao?"Cancelar":"Selecionar"}
           </button>
         </div>
       </div>
@@ -2911,12 +2961,12 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
         <div style={{background:"var(--navy)",borderRadius:8,padding:"10px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
           <span style={{fontSize:12.5,fontWeight:600,color:"#fff"}}>{selecionados.size} processo(s) selecionado(s)</span>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            <button onClick={()=>setAcaoLote("arquivar")} style={btnLote}>📦 Arquivar</button>
-            <button onClick={()=>aplicarLote({tipo:"desarquivar"})} style={btnLote}>📂 Desarquivar</button>
-            <button onClick={()=>setAcaoLote("status")} style={btnLote}>🔄 Status</button>
-            <button onClick={()=>setAcaoLote("classificacao")} style={btnLote}>🏷 Classificação</button>
-            <button onClick={()=>setAcaoLote("responsavel")} style={btnLote}>👤 Responsável</button>
-            <button onClick={()=>setAcaoLote("cliente")} style={btnLote}>🔗 Cliente</button>
+            <button onClick={()=>setAcaoLote("arquivar")} style={btnLote}>Arquivar</button>
+            <button onClick={()=>aplicarLote({tipo:"desarquivar"})} style={btnLote}>Desarquivar</button>
+            <button onClick={()=>setAcaoLote("status")} style={btnLote}>Status</button>
+            <button onClick={()=>setAcaoLote("classificacao")} style={btnLote}>Classificação</button>
+            <button onClick={()=>setAcaoLote("responsavel")} style={btnLote}>Responsável</button>
+            <button onClick={()=>setAcaoLote("cliente")} style={btnLote}>Cliente</button>
           </div>
         </div>
       )}
@@ -2978,13 +3028,11 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       )}
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1.7fr 1fr .8fr .95fr .8fr .85fr .6fr",padding:"11px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1.7fr 1fr .8fr .95fr .8fr .85fr .6fr",padding:"12px 18px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)",gap:12}}>
           {[["nome","Processo"],["cliente","Cliente"],["acao","Tipo/Vara"],["proximaAcao","Próxima ação"],["prazo","Prazo"],["responsavel","Responsável"],["status","Status"]].map(([campo,label])=>(
-            <span key={campo} onClick={()=>alternarOrdenacao(campo)} style={{...hdr,cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:4}}>
+            <span key={campo} onClick={()=>alternarOrdenacao(campo)} style={{...hdr,cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}>
               {label}
-              <span style={{fontSize:9,color: ordenacao.campo===campo ? "var(--accent)" : "var(--border3)"}}>
-                {ordenacao.campo===campo ? (ordenacao.direcao==="asc"?"▲":"▼") : "▲"}
-              </span>
+              <Icon name={ordenacao.campo===campo && ordenacao.direcao==="desc" ? "chevronDown" : "chevronUp"} size={11} color={ordenacao.campo===campo ? "var(--accent)" : "var(--border3)"}/>
             </span>
           ))}
         </div>
@@ -3007,70 +3055,75 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
                   {(()=>{
                     const {nomeCliente, adversa} = clientePrincipalEAdversa(p, clientes);
                     return (
-                      <p style={{fontSize:13.5,fontWeight:600,color:"var(--text1)",margin:"0 0 3px",lineHeight:1.35}}>
+                      <p style={{fontSize:14.5,fontWeight:600,color:"var(--text1)",margin:"0 0 3px",lineHeight:1.35}}>
                         {nomeCliente} <span style={{color:"var(--text3)",fontWeight:400}}>×</span> {adversa}
                       </p>
                     );
                   })()}
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                    <span style={{fontSize:12.5,fontWeight:500,color:"var(--text2)",letterSpacing:".2px"}}>{p.numero}</span>
+                    <span style={{fontSize:12,fontWeight:500,color:"var(--text2)",letterSpacing:".2px"}}>{p.numero}</span>
                     {p.sistema&&<span style={{fontSize:9,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".3px"}}>{p.sistema}</span>}
                     {p.arquivado&&<span style={{fontSize:9,fontWeight:600,color:"var(--text3)",textTransform:"uppercase",letterSpacing:".3px"}}>· Arquivado</span>}
                   </div>
-                  {p.assunto&&<p style={{fontSize:11,color:"var(--text2)",margin:"4px 0 0",lineHeight:1.3}}>{p.assunto}</p>}
+                  {p.assunto&&<p style={{fontSize:11,fontWeight:400,color:"var(--text2)",margin:"4px 0 0",lineHeight:1.3}}>{p.assunto}</p>}
                 </div>
                 <div style={{minWidth:0,display:"flex",alignItems:"center",gap:8}}>
                   {cli && <div style={{width:26,height:26,borderRadius:"50%",background:"var(--accent-light)",color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,flexShrink:0}}>{cli.nome.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase()}</div>}
-                  <p style={{fontSize:12.5,color:"var(--text1)",margin:0,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cli?cli.nome:"—"}</p>
+                  <p style={{fontSize:12,fontWeight:400,color:"var(--text1)",margin:0,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cli?cli.nome:"—"}</p>
                 </div>
                 <div style={{minWidth:0}}>
-                  {p.classificacao&&<p style={{fontSize:12,color:"var(--text1)",margin:"0 0 2px",lineHeight:1.3}}>{CC[p.classificacao]?.label||p.classificacao}</p>}
-                  <p style={{fontSize:10.5,color:"var(--text2)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.vara||"—"}</p>
+                  {p.classificacao&&<p style={{fontSize:12,fontWeight:500,color:"var(--text1)",margin:"0 0 2px",lineHeight:1.3}}>{CC[p.classificacao]?.label||p.classificacao}</p>}
+                  <p style={{fontSize:11,fontWeight:400,color:"var(--text2)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.vara||"—"}</p>
                 </div>
                 <div style={{minWidth:0}}>
                   {p.prazoAto ? (
-                    <p style={{fontSize:11.5,color:"var(--text1)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>📄 {p.prazoAto}</p>
+                    <p style={{fontSize:11.5,fontWeight:400,color:"var(--text1)",margin:0,lineHeight:1.35,display:"flex",alignItems:"flex-start",gap:5}}><Icon name="clipboard" size={12} color="var(--text3)" style={{marginTop:2,flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.prazoAto}</span></p>
                   ) : ultimoAto ? (
-                    <p style={{fontSize:10.5,color:"var(--text3)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ultimoAto.desc}</p>
+                    <p style={{fontSize:11,fontWeight:400,color:"var(--text3)",margin:0,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{ultimoAto.desc}</p>
                   ) : <span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
                 </div>
-                <div style={{minWidth:0}}>
+                <div style={{minWidth:0}} onClick={e=>{
+                    if(!p.prazo) return;
+                    e.stopPropagation();
+                    if(confirm(`Marcar o prazo "${p.prazoAto||"deste processo"}" como cumprido?\n\nIsso limpa o prazo do processo e conclui a tarefa vinculada.`)) marcarPrazoCumprido(p.id);
+                  }} title={p.prazo?"Clique para marcar como cumprido":undefined} style={{minWidth:0, cursor:p.prazo?"pointer":"default"}}>
                   {p.prazo?(
-                    <p style={{fontSize:11.5,color:urg?"var(--red)":"var(--text1)",margin:0,fontWeight:urg?700:500}}>{fmtData(p.prazo)}</p>
+                    <p style={{fontSize:12,fontWeight:500,color:urg?"var(--red)":"var(--text1)",margin:0}}>{fmtData(p.prazo)}</p>
                   ):<span style={{fontSize:11,color:"var(--text3)"}}>—</span>}
                   {p.prazo&&(
-                    <p style={{fontSize:9.5,fontWeight:700,margin:"3px 0 0",padding:"1px 7px",borderRadius:10,display:"inline-block",
+                    <p style={{fontSize:9.5,fontWeight:600,margin:"3px 0 0",padding:"1px 7px",borderRadius:10,display:"inline-block",
                       background: dias<0?"var(--red-bg)":dias===0?"var(--amber-bg)":dias<=7?"var(--amber-bg)":"var(--bg2)",
                       color: dias<0?"var(--red)":dias===0?"var(--amber)":dias<=7?"var(--amber)":"var(--text2)"}}>
                       {dias<0?"VENCIDO":dias===0?"HOJE":`EM ${dias} DIAS`}
                     </p>
                   )}
+                  {p.prazo&&<p style={{fontSize:9,fontWeight:400,color:"var(--text3)",margin:"3px 0 0"}}>marcar cumprido</p>}
                 </div>
                 <div style={{minWidth:0,display:"flex",alignItems:"center",gap:6}}>
                   {p.responsavel && <div style={{width:24,height:24,borderRadius:"50%",background:"var(--bg3)",color:"var(--text2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,flexShrink:0}}>{p.responsavel.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase()}</div>}
-                  <p style={{fontSize:11.5,color:"var(--text1)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.responsavel||"—"}</p>
+                  <p style={{fontSize:11.5,fontWeight:400,color:"var(--text1)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.responsavel||"—"}</p>
                 </div>
                 <div style={{display:"flex",alignItems:"center"}}>
                   {(()=>{
                     const prazoUrgente = pp?.ativo && pp.vencimento && diasRest(pp.vencimento)<=3;
                     if(prazoUrgente){
                       const vencido = diasRest(pp.vencimento)<0;
-                      return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:20,background:vencido?"var(--red-bg)":"var(--amber-bg)",color:vencido?"var(--red)":"var(--amber)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>⚠ Prazo</span>;
+                      return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:600,padding:"3px 8px",borderRadius:20,background:vencido?"var(--red-bg)":"var(--amber-bg)",color:vencido?"var(--red)":"var(--amber)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}><Icon name="alertTriangle" size={10}/> Prazo</span>;
                     }
                     return (
                       <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
                         <span style={{width:7,height:7,borderRadius:"50%",background:SC[normalizarStatus(p.status)]?.dot,display:"inline-block",flexShrink:0}}/>
-                        <span style={{fontSize:10,color:"var(--text2)",fontWeight:500}}>{SC[normalizarStatus(p.status)]?.label}</span>
+                        <span style={{fontSize:10,fontWeight:400,color:"var(--text2)"}}>{SC[normalizarStatus(p.status)]?.label}</span>
                       </span>
                     );
                   })()}
                 </div>
               </div>
               <div className="proc-actions" style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",display:"flex",gap:4,background:"#fff",boxShadow:"-8px 0 12px rgba(255,255,255,.9)",paddingLeft:8}}>
-                <button onClick={e=>{e.stopPropagation();setColandoMovPara(p);}} title="Colar movimentação" style={btnIcon}>📋</button>
-                <button onClick={e=>{e.stopPropagation();abrirAnalisePrazo(p);}} title="Analisar prazo com IA" style={btnIcon}>⏱</button>
-                <button onClick={e=>{e.stopPropagation();setMapaProc(p);}} title="Mapa do processo" style={btnIcon}>🗺</button>
-                {us.erro&&<button onClick={e=>{e.stopPropagation();setErroDetalheAberto({proc:p, erro:us.erro});}} title="Ver erro" style={{...btnIcon,color:"var(--red)"}}>⚠</button>}
+                <button onClick={e=>{e.stopPropagation();setColandoMovPara(p);}} title="Colar movimentação" style={btnIcon}><Icon name="clipboard" size={14} color="var(--text2)"/></button>
+                <button onClick={e=>{e.stopPropagation();abrirAnalisePrazo(p);}} title="Analisar prazo com IA" style={btnIcon}><Icon name="clock" size={14} color="var(--text2)"/></button>
+                <button onClick={e=>{e.stopPropagation();setMapaProc(p);}} title="Mapa do processo" style={btnIcon}><Icon name="map" size={14} color="var(--text2)"/></button>
+                {us.erro&&<button onClick={e=>{e.stopPropagation();setErroDetalheAberto({proc:p, erro:us.erro});}} title="Ver erro" style={{...btnIcon,color:"var(--red)"}}><Icon name="alertTriangle" size={14} color="var(--red)"/></button>}
                 {us.done&&us.novos>0&&<button onClick={e=>{e.stopPropagation();atualizarProcesso(p.id);}} title={`${us.novos} novo(s)`} style={{...btnIcon,color:"var(--accent)"}}>↻</button>}
               </div>
             </div>
@@ -5144,16 +5197,16 @@ function AppPrincipal({user}){
   const irPara = (destino) => setPagina(destino);
 
   const NAV = [
-    {id:"dashboard", label:"Visão Geral", icon:"🏠"},
-    {id:"processos", label:"Processos", icon:"📂"},
-    {id:"clientes", label:"Clientes", icon:"👤"},
-    {id:"tarefas", label:"Prazos e Tarefas", icon:"✅"},
-    {id:"agenda", label:"Agenda", icon:"📅"},
-    {id:"financeiro", label:"Financeiro", icon:"💰"},
-    {id:"relatorios", label:"Relatórios", icon:"📊"},
-    {id:"intimacoes", label:"Intimações", icon:"📨"},
-    {id:"importacao", label:"Importação", icon:"📥"},
-    {id:"equipe", label:"Equipe", icon:"👥"},
+    {id:"dashboard", label:"Visão Geral", icon:"house"},
+    {id:"processos", label:"Processos", icon:"folder"},
+    {id:"clientes", label:"Clientes", icon:"users"},
+    {id:"tarefas", label:"Prazos e Tarefas", icon:"checkSquare"},
+    {id:"agenda", label:"Agenda", icon:"calendar"},
+    {id:"financeiro", label:"Financeiro", icon:"wallet"},
+    {id:"relatorios", label:"Relatórios", icon:"barChart"},
+    {id:"intimacoes", label:"Intimações", icon:"bell"},
+    {id:"importacao", label:"Importação", icon:"upload"},
+    {id:"equipe", label:"Equipe", icon:"usersRound"},
   ];
 
   if(carregandoDados){
@@ -5170,24 +5223,29 @@ function AppPrincipal({user}){
 
   return (
     <div id="root-app" style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-      <div className="sidebar" style={{width:220,background:"var(--navy)",borderRight:"1px solid #232842",padding:"20px 14px",display:"flex",flexDirection:"column",flexShrink:0,overflowY:"auto"}}>
-        <img src={LOGO_MICHELLI_ABREU} alt="Michelli Abreu Advocacia" style={{width:"100%",maxWidth:180,margin:"0 8px 22px",display:"block"}}/>
-        {NAV.map(n=>(
-          <div key={n.id} className="sidebar-item" onClick={()=>setPagina(n.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:7,cursor:"pointer",marginBottom:2,background:pagina===n.id?"rgba(255,255,255,.08)":"transparent",color:pagina===n.id?"#fff":"rgba(255,255,255,.65)",fontSize:12.5,fontWeight:pagina===n.id?600:500}}>
-            <span style={{fontSize:14}}>{n.icon}</span>{n.label}
-          </div>
-        ))}
-        <div style={{marginTop:"auto",paddingTop:14,borderTop:"1px solid rgba(255,255,255,.1)"}}>
+      <div className="sidebar" style={{width:224,background:"var(--navy)",borderRight:"1px solid #2A251E",padding:"26px 14px 20px",display:"flex",flexDirection:"column",flexShrink:0,overflowY:"auto"}}>
+        <img src={LOGO_MICHELLI_ABREU} alt="Michelli Abreu Advocacia" style={{width:"100%",maxWidth:170,margin:"0 8px 34px",display:"block"}}/>
+        {NAV.map(n=>{
+          const ativo = pagina===n.id;
+          return (
+            <div key={n.id} className="sidebar-item" onClick={()=>setPagina(n.id)} style={{display:"flex",alignItems:"center",gap:11,padding:"10px 12px",borderRadius:8,cursor:"pointer",marginBottom:3,position:"relative",background:ativo?"rgba(255,255,255,.06)":"transparent",color:ativo?"#fff":"rgba(255,255,255,.58)",fontSize:12.5,fontWeight:ativo?600:500,transition:"background .15s,color .15s"}}>
+              {ativo && <span style={{position:"absolute",left:0,top:"20%",bottom:"20%",width:3,borderRadius:3,background:"var(--accent)"}}/>}
+              <Icon name={n.icon} size={16} color={ativo?"#EADFD5":"rgba(255,255,255,.55)"}/>
+              {n.label}
+            </div>
+          );
+        })}
+        <div style={{marginTop:"auto",paddingTop:16,borderTop:"1px solid rgba(255,255,255,.08)"}}>
           {avisoTabelasFaltando.length>0 && (
-            <p style={{fontSize:9.5,color:"#F5CE85",margin:"0 8px 8px",lineHeight:1.4}}>
+            <p style={{fontSize:9.5,color:"#D9B98A",margin:"0 8px 8px",lineHeight:1.4}}>
               ⚠ Tabela(s) não encontradas no Supabase: {avisoTabelasFaltando.join(", ")}. Essas áreas ficam vazias até a tabela ser criada.
             </p>
           )}
-          <p style={{fontSize:10,color:"rgba(255,255,255,.4)",margin:"0 8px 4px"}}>
+          <p style={{fontSize:10,color:"rgba(255,255,255,.35)",margin:"0 8px 6px",letterSpacing:".2px"}}>
             {sincStatus==="salvando"?"Salvando…":sincStatus==="salvo"?"✓ Salvo":sincStatus.startsWith("erro")?`⚠ ${sincStatus.slice(5)}`:"Sincronizado"}
           </p>
-          <div onClick={()=>sb&&sb.auth.signOut()} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:7,cursor:"pointer",color:"rgba(255,255,255,.5)",fontSize:12}}>
-            <span>🚪</span>Sair
+          <div onClick={()=>sb&&sb.auth.signOut()} style={{display:"flex",alignItems:"center",gap:11,padding:"10px 12px",borderRadius:8,cursor:"pointer",color:"rgba(255,255,255,.45)",fontSize:12}}>
+            <Icon name="logOut" size={15} color="rgba(255,255,255,.45)"/> Sair
           </div>
         </div>
       </div>
