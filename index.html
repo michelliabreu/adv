@@ -2290,7 +2290,7 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
     </div>
   );
 }
-function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido}){
+function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, intimacoes, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido}){
   const [mostrarUrgentes, setMostrarUrgentes] = useState(false);
   const tarefasPendentes = (tarefas||[]).filter(t=>t.status!=="concluido");
   const tarefasAtrasadas = tarefasPendentes.filter(t=>t.prazo&&diasRest(t.prazo)<0);
@@ -2386,6 +2386,17 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe
       </div>
 
       <CaixaEntradaIA processos={processos} clientes={clientes} setProcessos={setProcessos} setClientes={setClientes} onAbrirProcesso={onAbrirProcesso}/>
+
+      {(()=>{
+        const naoLidasDjen = (intimacoes||[]).filter(i=>!i.lida).length;
+        if(naoLidasDjen===0) return null;
+        return (
+          <div onClick={()=>onIrPara("intimacoes")} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--accent-light)",border:"1px solid #E4CDC5",borderRadius:8,padding:"10px 16px",marginBottom:16,cursor:"pointer"}}>
+            <span style={{fontSize:12.5,color:"var(--navy2)"}}><strong>{naoLidasDjen}</strong> publicação(ões) nova(s) no DJEN aguardando leitura</span>
+            <span style={{fontSize:12,fontWeight:600,color:"var(--accent)"}}>Ver intimações →</span>
+          </div>
+        );
+      })()}
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
         <AlertCard
@@ -2960,45 +2971,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   // Problema 2/3: ao marcar/alterar a data do "Prazo" do processo, cria ou atualiza
   // automaticamente um Prazo/Tarefa vinculado (com o ato pendente já nomeado), e
   // como a tarefa nasce com procId preenchido, ela já aparece cruzada em ambas as páginas.
-  const sincronizarTarefaDoPrazo = (procAtualizado) => {
-    if(!setTarefas) return;
-    setTarefas(ts=>{
-      const existente = ts.find(t=>t.origemPrazoProcId===procAtualizado.id);
-      if(!procAtualizado.prazo){
-        if(existente) return ts.map(t=>t.id===existente.id?{...t,arquivada:true}:t);
-        return ts;
-      }
-      const dias = diasRest(procAtualizado.prazo);
-      const prioridade = dias<=3 ? "alta" : dias<=7 ? "media" : "baixa";
-      if(existente){
-        // Se o prazo (data) mudou em relação ao que já estava salvo, é um novo ciclo de
-        // prazo — a tarefa deve voltar a ser "pendente" mesmo que a antiga já estivesse concluída.
-        const dataMudou = existente.prazo !== procAtualizado.prazo;
-        return ts.map(t=>t.id===existente.id?{...t,
-          titulo: procAtualizado.prazoAto || t.titulo,
-          prazo: procAtualizado.prazo,
-          prioridade,
-          procId: procAtualizado.id,
-          clienteId: procAtualizado.clienteId || t.clienteId,
-          arquivada: false,
-          status: dataMudou ? "pendente" : t.status,
-        }:t);
-      }
-      return [...ts, {
-        id: Date.now(),
-        titulo: procAtualizado.prazoAto || `Prazo do processo ${procAtualizado.numero}`,
-        responsavelId: "",
-        procId: procAtualizado.id,
-        clienteId: procAtualizado.clienteId || "",
-        status: "pendente",
-        prioridade,
-        prazo: procAtualizado.prazo,
-        desc: "Gerado automaticamente a partir do prazo marcado no processo.",
-        arquivada: false,
-        origemPrazoProcId: procAtualizado.id,
-      }];
-    });
-  };
+  const sincronizarTarefaDoPrazo = (procAtualizado) => sincronizarTarefaDeProcesso(procAtualizado, setTarefas);
 
   const salvarPrazoDoProcesso = (procId, prazo, ato) => {
     setProcessos(ps=>{
@@ -4000,61 +3973,129 @@ function ModalCriarTarefaIntimacao({intimacao, equipe, onConfirm, onClose}){
     </div>
   );
 }
-function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, equipe, setTarefas, onAbrirProcesso}){
+// Busca publicações no DJEN (Diário de Justiça Eletrônico Nacional) pela API pública
+// usada pelo próprio portal comunica.pje.jus.br — não exige login para consulta.
+// Função pura (não mexe em estado) para ser reutilizada tanto no botão manual quanto na busca automática.
+// Sincroniza a tarefa vinculada ao prazo de um processo — usada tanto na página de
+// Processos quanto na de Intimações (ex: "Adicionar prazo a partir de publicação"),
+// para que qualquer prazo marcado, de onde quer que venha, sempre gere/atualize a
+// tarefa correspondente em "Prazos e Tarefas".
+function sincronizarTarefaDeProcesso(procAtualizado, setTarefas){
+  if(!setTarefas) return;
+  setTarefas(ts=>{
+    const existente = ts.find(t=>t.origemPrazoProcId===procAtualizado.id);
+    if(!procAtualizado.prazo){
+      if(existente) return ts.map(t=>t.id===existente.id?{...t,arquivada:true}:t);
+      return ts;
+    }
+    const dias = diasRest(procAtualizado.prazo);
+    const prioridade = dias<=3 ? "alta" : dias<=7 ? "media" : "baixa";
+    if(existente){
+      const dataMudou = existente.prazo !== procAtualizado.prazo;
+      return ts.map(t=>t.id===existente.id?{...t,
+        titulo: procAtualizado.prazoAto || t.titulo,
+        prazo: procAtualizado.prazo,
+        prioridade,
+        procId: procAtualizado.id,
+        clienteId: procAtualizado.clienteId || t.clienteId,
+        arquivada: false,
+        status: dataMudou ? "pendente" : t.status,
+      }:t);
+    }
+    return [...ts, {
+      id: Date.now(),
+      titulo: procAtualizado.prazoAto || `Prazo do processo ${procAtualizado.numero}`,
+      responsavelId: "",
+      procId: procAtualizado.id,
+      clienteId: procAtualizado.clienteId || "",
+      status: "pendente",
+      prioridade,
+      prazo: procAtualizado.prazo,
+      desc: "Gerado automaticamente a partir do prazo marcado no processo.",
+      arquivada: false,
+      origemPrazoProcId: procAtualizado.id,
+    }];
+  });
+}
+
+// Quando uma intimação já chega vinculada a um processo (ex: o DJEN identificou o
+// número do processo automaticamente), lança o texto dela como andamento do processo.
+function aplicarIntimacoesComoAndamentos(novasIntimacoes, setProcessos){
+  const comProcesso = (novasIntimacoes||[]).filter(i=>i.procId && i.texto);
+  if(!comProcesso.length || !setProcessos) return;
+  setProcessos(ps=>ps.map(p=>{
+    const dessas = comProcesso.filter(i=>i.procId===p.id);
+    if(!dessas.length) return p;
+    let andamentos = [...(p.andamentos||[])];
+    dessas.forEach(i=>{
+      const data = (i.dataDisponibilizacao||"").slice(0,10) || hoje.toISOString().slice(0,10);
+      const jaExiste = andamentos.some(a=>a.data===data && a.desc===i.texto);
+      if(!jaExiste) andamentos.push({data, desc:i.texto, fonte:"cnj"});
+    });
+    andamentos.sort((a,b)=>a.data.localeCompare(b.data));
+    return {...p, andamentos};
+  }));
+}
+
+async function buscarPublicacoesDJEN({oabNumero, oabUf, dias, intimacoesAtuais, processos}){
+  const hojeObj = new Date();
+  const dataFim = hojeObj.toISOString().slice(0,10);
+  const inicioObj = new Date(hojeObj); inicioObj.setDate(inicioObj.getDate() - parseInt(dias||15));
+  const dataInicio = inicioObj.toISOString().slice(0,10);
+  const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroOab=${encodeURIComponent(oabNumero)}&ufOab=${encodeURIComponent(oabUf)}&dataDisponibilizacaoInicio=${dataInicio}&dataDisponibilizacaoFim=${dataFim}`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch(e) {
+    throw new Error("Não foi possível conectar ao DJEN — o navegador provavelmente bloqueou por CORS. Use o link de consulta pública manual para conferir.");
+  }
+  if(!res.ok) throw new Error(`Erro HTTP ${res.status} ao consultar o DJEN.`);
+  const data = await res.json();
+  const itens = Array.isArray(data) ? data : (data.items || data.comunicacoes || data.data || []);
+  if(!Array.isArray(itens)) throw new Error("Formato de resposta inesperado do DJEN.");
+  const existentesIds = new Set((intimacoesAtuais||[]).map(i=>i.djenId).filter(Boolean));
+  const novas = itens
+    .map(it=>({
+      djenId: String(it.id ?? it.hash ?? it.numero_processo_completo ?? `${it.data_disponibilizacao||it.dataDisponibilizacao||""}-${it.texto||it.teor||""}`.slice(0,80)),
+      orgao: it.nome_orgao || it.nomeOrgao || it.siglaTribunal || it.tribunal || "DJEN",
+      texto: it.texto || it.teor || it.resumo || "",
+      dataDisponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || it.data || null,
+      numeroProcesso: it.numero_processo || it.numeroProcesso || it.numeroprocessocommascara || null,
+    }))
+    .filter(it=>!existentesIds.has(it.djenId))
+    .map(it=>{
+      const procEncontrado = it.numeroProcesso ? (processos||[]).find(p=>p.numero.replace(/\D/g,"")===String(it.numeroProcesso).replace(/\D/g,"")) : null;
+      return {
+        id: Date.now()+Math.floor(Math.random()*1000),
+        orgao: it.orgao,
+        texto: it.texto,
+        dataDisponibilizacao: it.dataDisponibilizacao,
+        procId: procEncontrado ? procEncontrado.id : null,
+        lida: false,
+        arquivada: false,
+        djenId: it.djenId,
+      };
+    });
+  return novas;
+}
+
+function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, equipe, setTarefas, onAbrirProcesso, configDjen}){
   const [filtro,setFiltro] = useState("novas");
   const [criandoPrazoPara, setCriandoPrazoPara] = useState(null);
   const [criandoTarefaPara, setCriandoTarefaPara] = useState(null);
-  const [oabNumero, setOabNumero] = useState("155134");
-  const [oabUf, setOabUf] = useState("RJ");
+  const [oabNumero, setOabNumero] = useState(configDjen?.oabNumero || "155134");
+  const [oabUf, setOabUf] = useState(configDjen?.oabUf || "RJ");
   const [buscandoDjen, setBuscandoDjen] = useState(false);
   const [erroDjen, setErroDjen] = useState("");
   const [resultadoDjen, setResultadoDjen] = useState("");
   const [diasBusca, setDiasBusca] = useState(15);
 
-  // Busca publicações no DJEN (Diário de Justiça Eletrônico Nacional) pela API pública
-  // usada pelo próprio portal comunica.pje.jus.br — não exige login para consulta.
   const buscarDJEN = async () => {
     setErroDjen(""); setResultadoDjen(""); setBuscandoDjen(true);
     try {
-      const hojeObj = new Date();
-      const dataFim = hojeObj.toISOString().slice(0,10);
-      const inicioObj = new Date(hojeObj); inicioObj.setDate(inicioObj.getDate() - parseInt(diasBusca||15));
-      const dataInicio = inicioObj.toISOString().slice(0,10);
-      const url = `https://comunicaapi.pje.jus.br/api/v1/comunicacao?numeroOab=${encodeURIComponent(oabNumero)}&ufOab=${encodeURIComponent(oabUf)}&dataDisponibilizacaoInicio=${dataInicio}&dataDisponibilizacaoFim=${dataFim}`;
-      let res;
-      try {
-        res = await fetch(url);
-      } catch(e) {
-        throw new Error("Não foi possível conectar ao DJEN — o navegador provavelmente bloqueou por CORS. Use o link de consulta pública abaixo para conferir manualmente.");
-      }
-      if(!res.ok) throw new Error(`Erro HTTP ${res.status} ao consultar o DJEN.`);
-      const data = await res.json();
-      const itens = Array.isArray(data) ? data : (data.items || data.comunicacoes || data.data || []);
-      if(!Array.isArray(itens)) throw new Error("Formato de resposta inesperado do DJEN.");
-      const existentesIds = new Set((intimacoes||[]).map(i=>i.djenId).filter(Boolean));
-      const novas = itens
-        .map(it=>({
-          djenId: String(it.id ?? it.hash ?? it.numero_processo_completo ?? `${it.data_disponibilizacao||it.dataDisponibilizacao||""}-${it.texto||it.teor||""}`.slice(0,80)),
-          orgao: it.nome_orgao || it.nomeOrgao || it.siglaTribunal || it.tribunal || "DJEN",
-          texto: it.texto || it.teor || it.resumo || "",
-          dataDisponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || it.data || null,
-          numeroProcesso: it.numero_processo || it.numeroProcesso || it.numeroprocessocommascara || null,
-        }))
-        .filter(it=>!existentesIds.has(it.djenId))
-        .map(it=>{
-          const procEncontrado = it.numeroProcesso ? processos.find(p=>p.numero.replace(/\D/g,"")===String(it.numeroProcesso).replace(/\D/g,"")) : null;
-          return {
-            id: Date.now()+Math.floor(Math.random()*1000),
-            orgao: it.orgao,
-            texto: it.texto,
-            dataDisponibilizacao: it.dataDisponibilizacao,
-            procId: procEncontrado ? procEncontrado.id : null,
-            lida: false,
-            arquivada: false,
-            djenId: it.djenId,
-          };
-        });
-      if(novas.length) setIntimacoes(is=>[...novas, ...(is||[])]);
+      if(configDjen){ configDjen.salvarConfig(oabNumero, oabUf); }
+      const novas = await buscarPublicacoesDJEN({oabNumero, oabUf, dias:diasBusca, intimacoesAtuais:intimacoes, processos});
+      if(novas.length){ setIntimacoes(is=>[...novas, ...(is||[])]); aplicarIntimacoesComoAndamentos(novas, setProcessos); }
       setResultadoDjen(novas.length>0 ? `${novas.length} nova(s) publicação(ões) encontrada(s) e adicionada(s) à lista.` : "Nenhuma publicação nova encontrada no período.");
     } catch(e) {
       setErroDjen(e.message || "Erro ao consultar o DJEN.");
@@ -4074,14 +4115,36 @@ function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, e
   const marcarLida = id => setIntimacoes(is=>is.map(i=>i.id===id?{...i,lida:true}:i));
   const arquivar = id => setIntimacoes(is=>is.map(i=>i.id===id?{...i,arquivada:true,lida:true}:i));
 
+  // Ao vincular uma intimação a um processo, o texto da publicação também é lançado
+  // como andamento do processo — assim ela já aparece no histórico/relatório dele.
   const vincularProcesso = (intimacaoId, procId) => {
+    const intimacao = (intimacoes||[]).find(i=>i.id===intimacaoId);
     setIntimacoes(is=>is.map(i=>i.id===intimacaoId?{...i,procId:procId?parseInt(procId):null}:i));
+    if(procId && intimacao?.texto){
+      const novoProcId = parseInt(procId);
+      setProcessos(ps=>ps.map(p=>{
+        if(p.id!==novoProcId) return p;
+        const data = (intimacao.dataDisponibilizacao||"").slice(0,10) || hoje.toISOString().slice(0,10);
+        const jaExiste = (p.andamentos||[]).some(a=>a.data===data && a.desc===intimacao.texto);
+        if(jaExiste) return p;
+        const novos = [...(p.andamentos||[]), {data, desc:intimacao.texto, fonte:"cnj"}].sort((a,b)=>a.data.localeCompare(b.data));
+        return {...p, andamentos:novos};
+      }));
+    }
   };
 
   const confirmarPrazo = (info) => {
     const procId = criandoPrazoPara.procId;
     if(procId){
-      setProcessos(ps=>ps.map(p=>p.id===procId?{...p,prazoProcessual:info}:p));
+      setProcessos(ps=>{
+        const atualizado = ps.map(p=>p.id===procId?{...p, prazoProcessual:info, prazo:info.vencimento||p.prazo, prazoAto:info.proximoAto||p.prazoAto}:p);
+        const procNovo = atualizado.find(p=>p.id===procId);
+        sincronizarTarefaDeProcesso(procNovo, setTarefas);
+        return atualizado;
+      });
+    } else {
+      alert("Esta intimação ainda não está vinculada a um processo — selecione o processo antes de criar o prazo, para que ele apareça em Prazos e Tarefas.");
+      return;
     }
     marcarLida(criandoPrazoPara.id);
     setCriandoPrazoPara(null);
@@ -5307,6 +5370,16 @@ function AppPrincipal({user}){
   const [agenda, setAgenda] = useState([]);
   const [equipe, setEquipe] = useState([]);
   const [intimacoes, setIntimacoes] = useState([]);
+  const [oabNumeroConfig, setOabNumeroConfig] = useState(()=>{
+    try { return localStorage.getItem("djen_oabNumero") || "155134"; } catch(e){ return "155134"; }
+  });
+  const [oabUfConfig, setOabUfConfig] = useState(()=>{
+    try { return localStorage.getItem("djen_oabUf") || "RJ"; } catch(e){ return "RJ"; }
+  });
+  const salvarConfigDjen = (numero, uf) => {
+    setOabNumeroConfig(numero); setOabUfConfig(uf);
+    try { localStorage.setItem("djen_oabNumero", numero); localStorage.setItem("djen_oabUf", uf); } catch(e){}
+  };
   const [mapas, setMapas] = useState({});
   const [classificacoesCustom, setClassificacoesCustom] = useState([]);
   const [abrirProcessoId, setAbrirProcessoId] = useState(null);
@@ -5551,6 +5624,30 @@ function AppPrincipal({user}){
   React.useEffect(()=>{ autoSave("equipe", equipe); }, [equipe]);
   React.useEffect(()=>{ autoSave("intimacoes", intimacoes); }, [intimacoes]);
 
+  // Busca automática do DJEN: como o sistema só roda dentro do navegador (sem servidor
+  // próprio), não há como agendar algo para às 7h em ponto mesmo com o site fechado.
+  // O que fazemos: ao abrir o sistema, se já passou das 7h e a busca automática ainda
+  // não rodou hoje, ela dispara sozinha em segundo plano (silenciosa, sem travar a tela).
+  React.useEffect(()=>{
+    if(carregandoDados) return;
+    const agora = new Date();
+    if(agora.getHours() < 7) return;
+    const hojeStr = agora.toISOString().slice(0,10);
+    let ultimaBusca = null;
+    try { ultimaBusca = localStorage.getItem("djen_ultima_busca_auto"); } catch(e){}
+    if(ultimaBusca === hojeStr) return;
+    (async () => {
+      try {
+        const novas = await buscarPublicacoesDJEN({ oabNumero: oabNumeroConfig, oabUf: oabUfConfig, dias: 15, intimacoesAtuais: intimacoes, processos });
+        if(novas.length){ setIntimacoes(is=>[...novas, ...(is||[])]); aplicarIntimacoesComoAndamentos(novas, setProcessos); }
+        try { localStorage.setItem("djen_ultima_busca_auto", hojeStr); } catch(e){}
+      } catch(e) {
+        console.warn("Busca automática do DJEN falhou:", e.message||e);
+        try { localStorage.setItem("djen_ultima_busca_auto", hojeStr); } catch(_){}
+      }
+    })();
+  }, [carregandoDados]);
+
   const abrirProcesso = (proc) => { setAbrirProcessoId(proc.id); setPagina("processos"); };
 
   // Visualização rápida de prazo/tarefa: abre por cima da página atual, sem navegar,
@@ -5613,14 +5710,14 @@ function AppPrincipal({user}){
         </div>
       </div>
       <div style={{flex:1,overflow:"auto",padding:"24px 32px"}}>
-        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} agenda={agenda} equipe={equipe} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido}/>}
+        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} agenda={agenda} equipe={equipe} intimacoes={intimacoes} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos}/>}
         {pagina==="relatorios" && <PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
-        {pagina==="intimacoes" && <PaginaIntimacoes intimacoes={intimacoes} setIntimacoes={setIntimacoes} processos={processos} setProcessos={setProcessos} equipe={equipe} setTarefas={setTarefas} onAbrirProcesso={abrirProcesso}/>}
+        {pagina==="intimacoes" && <PaginaIntimacoes intimacoes={intimacoes} setIntimacoes={setIntimacoes} processos={processos} setProcessos={setProcessos} equipe={equipe} setTarefas={setTarefas} onAbrirProcesso={abrirProcesso} configDjen={{oabNumero:oabNumeroConfig, oabUf:oabUfConfig, salvarConfig:salvarConfigDjen}}/>}
         {pagina==="importacao" && <PaginaImportacao processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes}/>}
         {pagina==="equipe" && <PaginaEquipe equipe={equipe} setEquipe={setEquipe}/>}
       </div>
