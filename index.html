@@ -4496,7 +4496,13 @@ Use OBRIGATORIAMENTE os fatos concretos do caso fornecidos no contexto (partes, 
 
 Se o contexto fornecido não tiver fatos suficientes para fundamentar alguma parte do documento (ex: não há andamentos suficientes para narrar os fatos, ou falta algum dado essencial), diga isso explicitamente logo no início do rascunho, indicando o que falta — nunca invente fatos, datas, valores ou decisões que não estejam no contexto.
 
-Estruture a peça no padrão da prática jurídica brasileira (endereçamento, qualificação das partes quando aplicável, fatos, fundamentos, pedidos). Este é um rascunho de apoio — a advogada revisará antes de protocolar.`,
+Estruture a peça no padrão da prática jurídica brasileira (endereçamento, qualificação das partes quando aplicável, fatos, fundamentos, pedidos). Este é um rascunho de apoio — a advogada revisará antes de protocolar.
+
+PREFERÊNCIAS FIXAS DE FORMATAÇÃO DESTA ADVOGADA (aplique sempre, em toda peça):
+1. Endereçamento: sempre que a peça for dirigida a um juízo (contestação, réplica, manifestação, petição em geral), inicie com o cabeçalho no formato:
+"EXMO. SR. DR. JUIZ DE DIREITO DA [VARA] DA COMARCA DE [COMARCA] - [ÓRGÃO]"
+Preencha [VARA] e [COMARCA] usando o campo "Vara/Comarca" do processo fornecido no contexto (ex: se for "2ª Vara Cível de Itaboraí", então VARA = "2ª VARA CÍVEL" e COMARCA = "ITABORAÍ"). Preencha [ÓRGÃO] com a sigla do tribunal (ex: TJ/RJ para Justiça Estadual, JF/RJ ou JFRJ para Justiça Federal) — infira pelo sistema/tipo do processo quando possível; se não houver como determinar com segurança, use "TJ/RJ" como padrão e sinalize essa suposição em uma nota entre colchetes logo após o cabeçalho, para a advogada confirmar. Não use este cabeçalho em documentos que não sejam endereçados a um juízo (ex: notificação extrajudicial, parecer interno, e-mail).
+2. Formatação de parágrafos: NÃO use recuo de primeira linha (parágrafos em bloco, sem tabulação inicial) — separe os parágrafos apenas com espaçamento entre eles, sem indentação.`,
             messages: [{role:"user", content: contexto}]
           })
         });
@@ -5421,7 +5427,7 @@ async function gerarDocumentoTimbrado(nomeArquivo, conteudoTexto){
   const paragrafos = conteudoTexto.split(/\n+/).map(p=>p.trim()).filter(Boolean);
   const paragrafosXml = paragrafos.map(p=>{
     const texto = escaparXml(p);
-    return `<w:p><w:pPr><w:spacing w:after="240" w:line="360" w:lineRule="auto"/><w:ind w:firstLine="708"/><w:jc w:val="both"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${texto}</w:t></w:r></w:p>`;
+    return `<w:p><w:pPr><w:spacing w:after="240" w:line="360" w:lineRule="auto"/><w:jc w:val="both"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${texto}</w:t></w:r></w:p>`;
   }).join("");
 
   const bodyAberturaTag = "<w:body>";
