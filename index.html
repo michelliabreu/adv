@@ -327,7 +327,9 @@ function ModalColarMovimentacoes({proc, onConfirm, onClose}){
 Retorne SOMENTE um JSON válido (array), sem texto adicional, sem markdown. Cada item representa UM andamento distinto:
 [{"data":"YYYY-MM-DD","desc":"descrição do andamento, mantendo o texto original ou levemente limpo, sem inventar conteúdo"}]
 
-Ordene do mais antigo para o mais recente. Se uma data não puder ser identificada com confiança, use string vazia no campo data, mas ainda inclua o item. Nunca invente andamentos que não estejam no texto.`,
+Ordene do mais antigo para o mais recente. Se uma data não puder ser identificada com confiança, use string vazia no campo data, mas ainda inclua o item. Nunca invente andamentos que não estejam no texto.
+
+IMPORTANTE — número do evento (sistemas EPROC/PJe): se o texto mencionar um número de evento (ex: "evento 24", "evento 29, PET1", "evt. 12"), preserve essa referência literalmente dentro da descrição do andamento (ex: "Certidão do oficial de justiça (evento 24, CERTGM1) informando..."). Nunca omita o número do evento quando ele aparecer no texto original.`,
             messages: [{role:"user", content: texto}]
           })
         });
@@ -1066,12 +1068,14 @@ Nunca invente fatos, valores, nomes ou decisões que não estejam no contexto fo
   );
 }
 
-function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir,onSaveCampo,onSalvarPrazoProcesso,onSalvarPartes,onSalvarResumo}){
+function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUpdate,onSavePrazo,onSaveDebito,onCumprirPrazo,onToggleArquivado,onAddAndamento,onSaveAssunto,onAddTarefaProcesso,onSaveDriveLink,tarefasDoProcesso,onConcluirTarefaProc,onArquivarTarefaProc,onSaveVinculo,onRemoverVinculo,onAbrirOutroProcesso,onRegistrarExito,onSaveAudiencia,onExcluir,onSaveCampo,onSalvarPrazoProcesso,onSalvarPartes,onSalvarResumo,onEditarAndamento,onExcluirAndamento}){
   const [tab,setTab]=useState("andamentos");
   const [editandoDebito,setEditandoDebito]=useState(false);
   const [novoAndDesc,setNovoAndDesc]=useState("");
   const [novoAndData,setNovoAndData]=useState(hoje.toISOString().slice(0,10));
   const [novoAndDecisao,setNovoAndDecisao]=useState(false);
+  const [andamentoEditando,setAndamentoEditando]=useState(null);
+  const [andEditForm,setAndEditForm]=useState({data:"",desc:""});
   const [editandoAssunto,setEditandoAssunto]=useState(false);
   const [assuntoForm,setAssuntoForm]=useState(p.assunto||"");
   const [novaTarefaTitulo,setNovaTarefaTitulo]=useState("");
@@ -1340,15 +1344,40 @@ function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUp
               setNovoAndDesc(""); setNovoAndDecisao(false);
             }} style={{...btnSec, fontSize:11.5, marginBottom:16}}>+ Adicionar andamento</button>
 
-            {andOrd.length===0?<div style={{fontSize:13,color:"var(--text2)"}}>Sem andamentos.</div>:andOrd.map((a,i)=>(
-              <div key={i} style={{display:"flex",gap:14,fontSize:13,marginBottom:8,alignItems:"flex-start"}}>
-                <span style={{color:"var(--text2)",fontSize:11,whiteSpace:"nowrap",minWidth:80,marginTop:2}}>{fmtData(a.data)}</span>
-                <span style={{flex:1}}>{a.desc}
-                  {a.decisao===true&&<span style={{marginLeft:6,background:"var(--amber-bg)",color:"var(--amber)",borderRadius:3,padding:"0 5px",fontSize:10,fontWeight:600}}>decisão</span>}
-                  {a.fonte==="cnj"&&<span style={{marginLeft:4,background:"var(--accent-light)",color:"var(--navy2)",borderRadius:3,padding:"0 5px",fontSize:10,fontWeight:600}}>CNJ</span>}
-                </span>
-              </div>
-            ))}
+            {andOrd.length===0?<div style={{fontSize:13,color:"var(--text2)"}}>Sem andamentos.</div>:andOrd.map((a,i)=>{
+              const emEdicao = andamentoEditando && andamentoEditando.data===a.data && andamentoEditando.desc===a.desc && andamentoEditando.fonte===a.fonte;
+              if(emEdicao){
+                return (
+                  <div key={i} style={{border:"1px solid var(--border2)",borderRadius:6,padding:"10px 12px",marginBottom:8,background:"var(--bg2)"}}>
+                    <div style={{display:"flex",gap:8,marginBottom:8}}>
+                      <input type="date" value={andEditForm.data} onChange={e=>setAndEditForm(f=>({...f,data:e.target.value}))} style={{...inp,width:140,fontSize:12,padding:"6px 8px"}}/>
+                      <input value={andEditForm.desc} onChange={e=>setAndEditForm(f=>({...f,desc:e.target.value}))} style={{...inp,flex:1,fontSize:12,padding:"6px 8px"}}/>
+                    </div>
+                    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                      <button onClick={()=>setAndamentoEditando(null)} style={{...btnSec,fontSize:10.5,padding:"4px 10px"}}>Cancelar</button>
+                      <button onClick={()=>{
+                        if(!andEditForm.data||!andEditForm.desc.trim()) return;
+                        onEditarAndamento(p.id, a, {...a, data:andEditForm.data, desc:andEditForm.desc.trim()});
+                        setAndamentoEditando(null);
+                      }} style={{...btnPri,fontSize:10.5,padding:"4px 10px"}}>Salvar</button>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div key={i} style={{display:"flex",gap:14,fontSize:13,marginBottom:8,alignItems:"flex-start"}}>
+                  <span style={{color:"var(--text2)",fontSize:11,whiteSpace:"nowrap",minWidth:80,marginTop:2}}>{fmtData(a.data)}</span>
+                  <span style={{flex:1}}>{a.desc}
+                    {a.decisao===true&&<span style={{marginLeft:6,background:"var(--amber-bg)",color:"var(--amber)",borderRadius:3,padding:"0 5px",fontSize:10,fontWeight:600}}>decisão</span>}
+                    {a.fonte==="cnj"&&<span style={{marginLeft:4,background:"var(--accent-light)",color:"var(--navy2)",borderRadius:3,padding:"0 5px",fontSize:10,fontWeight:600}}>CNJ</span>}
+                  </span>
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <button onClick={()=>{setAndamentoEditando(a);setAndEditForm({data:a.data,desc:a.desc});}} title="Editar" style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12,padding:0}}>✎</button>
+                    <button onClick={()=>onExcluirAndamento(p.id, a)} title="Excluir" style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:13,padding:0}}>🗑</button>
+                  </div>
+                </div>
+              );
+            })}
           </div>}
           {tab==="tarefas"&&<div>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
@@ -2120,11 +2149,12 @@ function buscarProcessoPorTextoLivre(texto, processos){
   });
   return melhorScore>0 ? melhor : null;
 }
-function CaixaEntradaIA({processos, clientes, setProcessos, setClientes, onAbrirProcesso}){
+function CaixaEntradaIA({processos, clientes, setProcessos, setClientes, setTarefas, onAbrirProcesso}){
   const [texto, setTexto] = useState("");
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState("");
   const [proposta, setProposta] = useState(null);
+  const [analisandoPrazoDe, setAnalisandoPrazoDe] = useState(null);
 
   const interpretar = async () => {
     if(!texto.trim()){ setErro("Cole ou digite alguma informação antes de processar."); return; }
@@ -2156,10 +2186,15 @@ Formato de saída:
   "assunto": "assunto/classe do processo, se identificável",
   "valorCausa": "valor numérico da causa sem formatação, ou vazio",
   "novosAndamentos": [{"data":"YYYY-MM-DD","desc":"..."}],
+  "prazoSugerido": {"proximoAto":"...", "parte":"...", "diasPrazo": 15, "base":"..."} ou null,
   "resumo": "frase curta explicando o que você entendeu e o que vai ser feito"
 }
 
-Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata para um andamento, use a data de hoje (${hoje.toISOString().slice(0,10)}). Nunca invente número de processo, nomes ou valores que não estejam no texto. Se a ação for "atualizar", retorne apenas os campos que mudaram ou os novos andamentos — não repita dados que não mudaram.${contextoExistente}`,
+Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata para um andamento, use a data de hoje (${hoje.toISOString().slice(0,10)}). Nunca invente número de processo, nomes ou valores que não estejam no texto. Se a ação for "atualizar", retorne apenas os campos que mudaram ou os novos andamentos — não repita dados que não mudaram.
+
+IMPORTANTE — número do evento (sistemas EPROC/PJe): se o texto mencionar um número de evento (ex: "evento 24", "evento 29, PET1", "evt. 12"), preserve essa referência literalmente dentro da descrição do andamento em "novosAndamentos" (ex: "Certidão do oficial de justiça (evento 24, CERTGM1) informando..."). Nunca omita o número do evento quando ele aparecer no texto original.
+
+IMPORTANTE — prazo: se o texto contiver uma determinação que gera prazo/providência para a parte (ex: "intime-se para que informe em 15 dias", "manifeste-se em 5 dias"), preencha "prazoSugerido" com o ato a ser praticado, a parte responsável, o número de dias e a base legal/textual, para que a advogada possa confirmar e registrar o prazo. Se não houver nenhuma determinação que gere prazo, retorne "prazoSugerido": null — nunca invente um prazo que não esteja explícito no texto.${contextoExistente}`,
             messages: [{role:"user", content: texto}]
           })
         });
@@ -2208,7 +2243,7 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
         return atualizado;
       }));
       setTexto("");
-      setSucesso({id, numero: proposta.processoExistente.numero, novo:false});
+      setSucesso({id, numero: proposta.processoExistente.numero, novo:false, prazoSugerido: proposta.prazoSugerido||null});
       setProposta(null);
     } else {
       const novoId = Date.now();
@@ -2221,9 +2256,22 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
         documentos:[], checklist:{}, obs:"Criado via Caixa de Entrada Inteligente.",
       }]);
       setTexto("");
-      setSucesso({id: novoId, numero: proposta.numero||"(sem número)", novo:true});
+      setSucesso({id: novoId, numero: proposta.numero||"(sem número)", novo:true, prazoSugerido: proposta.prazoSugerido||null});
       setProposta(null);
     }
+  };
+
+  // Confirma o prazo sugerido pela IA (ou preenchido manualmente) direto na Caixa de
+  // Entrada, sem precisar navegar até Processos — já sincroniza a tarefa vinculada.
+  const confirmarPrazoSugerido = (info) => {
+    const procId = analisandoPrazoDe.id;
+    setProcessos(ps=>{
+      const atualizado = ps.map(x=>x.id===procId?{...x, prazoProcessual:info, prazo:info.vencimento||x.prazo, prazoAto:info.proximoAto||x.prazoAto}:x);
+      const procNovo = atualizado.find(x=>x.id===procId);
+      sincronizarTarefaDeProcesso(procNovo, setTarefas);
+      return atualizado;
+    });
+    setAnalisandoPrazoDe(null);
   };
 
   return (
@@ -2236,12 +2284,20 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
         Cole uma intimação, relatório de andamento ou dados de um caso novo. A IA identifica se deve criar um processo ou atualizar um já existente.
       </p>
       {sucesso && (
-        <div style={{marginBottom:10,padding:"10px 12px",background:"var(--green-bg)",border:"1px solid #A8DDB8",borderRadius:6,fontSize:12,color:"var(--green)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-          <span>✓ {sucesso.novo?"Processo criado":"Andamento lançado"} — {sucesso.numero}</span>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={()=>onAbrirProcesso({id:sucesso.id})} style={{...btnSec,fontSize:10.5,padding:"4px 10px"}}>Ver processo</button>
-            <button onClick={()=>setSucesso(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--green)",fontSize:15,padding:0,lineHeight:1}}>×</button>
+        <div style={{marginBottom:10,padding:"10px 12px",background:"var(--green-bg)",border:"1px solid #A8DDB8",borderRadius:6,fontSize:12,color:"var(--green)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+            <span>✓ {sucesso.novo?"Processo criado":"Andamento lançado"} — {sucesso.numero}</span>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <button onClick={()=>onAbrirProcesso({id:sucesso.id})} style={{...btnSec,fontSize:10.5,padding:"4px 10px"}}>Ver processo</button>
+              <button onClick={()=>setSucesso(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--green)",fontSize:15,padding:0,lineHeight:1}}>×</button>
+            </div>
           </div>
+          {sucesso.prazoSugerido && (
+            <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #A8DDB8",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{color:"var(--navy2)"}}>⏱ A IA identificou um prazo: <strong>{sucesso.prazoSugerido.proximoAto}</strong> ({sucesso.prazoSugerido.parte}, {sucesso.prazoSugerido.diasPrazo}d)</span>
+              <button onClick={()=>setAnalisandoPrazoDe({id:sucesso.id, numero:sucesso.numero})} style={{...btnPri,fontSize:10.5,padding:"5px 12px"}}>+ Adicionar este prazo</button>
+            </div>
+          )}
         </div>
       )}
       <textarea
@@ -2294,10 +2350,23 @@ Datas devem estar em YYYY-MM-DD. Se não conseguir identificar uma data exata pa
           </div>
         </div>
       )}
+      {analisandoPrazoDe && (()=>{
+        const procCompleto = processos.find(x=>x.id===analisandoPrazoDe.id);
+        const sug = sucesso?.prazoSugerido;
+        return (
+          <ModalConfirmarPrazo
+            proc={procCompleto || {numero: analisandoPrazoDe.numero, andamentos:[]}}
+            sugestao={sug ? {ato:sug.proximoAto, parte:sug.parte, prazo:sug.diasPrazo, base:sug.base} : null}
+            dataAndamento={hoje.toISOString().slice(0,10)}
+            onConfirm={confirmarPrazoSugerido}
+            onClose={()=>setAnalisandoPrazoDe(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
-function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe, intimacoes, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido}){
+function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, agenda, equipe, intimacoes, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido}){
   const [mostrarUrgentes, setMostrarUrgentes] = useState(false);
   const tarefasPendentes = (tarefas||[]).filter(t=>t.status!=="concluido");
   const tarefasAtrasadas = tarefasPendentes.filter(t=>t.prazo&&diasRest(t.prazo)<0);
@@ -2392,7 +2461,7 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, agenda, equipe
         <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{hoje.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p>
       </div>
 
-      <CaixaEntradaIA processos={processos} clientes={clientes} setProcessos={setProcessos} setClientes={setClientes} onAbrirProcesso={onAbrirProcesso}/>
+      <CaixaEntradaIA processos={processos} clientes={clientes} setProcessos={setProcessos} setClientes={setClientes} setTarefas={setTarefas} onAbrirProcesso={onAbrirProcesso}/>
 
       {(()=>{
         const naoLidasDjen = (intimacoes||[]).filter(i=>!i.lida).length;
@@ -2693,7 +2762,7 @@ function ModalAcaoLote({tipo, qtd, clientes, classificacoes, onAplicar, onClose}
     </div>
   );
 }
-function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setMapas,onNovoCliente,abrirProcessoId,onProcessoAberto,tarefas,setTarefas,setAgenda,setParcelas,classificacoesCustom,setClassificacoesCustom}){
+function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setMapas,onNovoCliente,abrirProcessoId,onProcessoAberto,tarefas,setTarefas,setAgenda,setParcelas,classificacoesCustom,setClassificacoesCustom,usuarioAtual}){
   const [aba,setAba]=useState("em_andamento");
   const [busca,setBusca]=useState("");
   const [filtrosAbertos,setFiltrosAbertos]=useState(false);
@@ -2758,7 +2827,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
 
   const updateChecklist=updated=>{setProcessos(ps=>ps.map(p=>p.id===updated.id?updated:p));setSelected(updated);};
   const saveDebito=(id,info,parcelasGeradas)=>{
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p,debito:info}:p));
+    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p,debito:info}, `Débito atualizado para ${fmtBRL(info?.valor||0)}`, usuarioAtual):p));
     setSelected(s=>s&&s.id===id?{...s,debito:info}:s);
     if(parcelasGeradas && parcelasGeradas.length && setParcelas){
       setParcelas(ps=>[...ps, ...parcelasGeradas]);
@@ -2768,7 +2837,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const registrarExito = (id, registro) => {
     setProcessos(ps=>ps.map(p=>{
       if(p.id!==id) return p;
-      return {...p, exitos: [...(p.exitos||[]), registro], debito: null};
+      return registrarHistorico({...p, exitos: [...(p.exitos||[]), registro], debito: null}, `Êxito registrado: ${fmtBRL(registro?.valorHonorarios||0)} de honorários`, usuarioAtual);
     }));
     setSelected(s=>{
       if(!s||s.id!==id) return s;
@@ -2777,7 +2846,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   };
 
   const saveAssunto=(id,assunto)=>{
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p,assunto}:p));
+    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p,assunto}, `Assunto alterado para "${assunto}"`, usuarioAtual):p));
     setSelected(s=>s&&s.id===id?{...s,assunto}:s);
   };
 
@@ -2785,11 +2854,48 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     setProcessos(ps=>ps.map(p=>{
       if(p.id!==id) return p;
       const novos=[...(p.andamentos||[]), andamento].sort((a,b)=>a.data.localeCompare(b.data));
-      return {...p, andamentos:novos};
+      return registrarHistorico({...p, andamentos:novos}, `Andamento adicionado (${andamento.data}): "${(andamento.desc||"").slice(0,80)}"`, usuarioAtual);
     }));
     setSelected(s=>{
       if(!s||s.id!==id) return s;
       const novos=[...(s.andamentos||[]), andamento].sort((a,b)=>a.data.localeCompare(b.data));
+      return {...s, andamentos:novos};
+    });
+  };
+
+  // Edição e exclusão de andamentos — antes só era possível adicionar.
+  // Identifica o andamento pelo próprio conteúdo (não por posição), já que a lista é
+  // exibida em ordem diferente (mais recente primeiro) da ordem interna de armazenamento.
+  const editarAndamento = (id, andamentoAntigo, andamentoEditado) => {
+    setProcessos(ps=>ps.map(p=>{
+      if(p.id!==id) return p;
+      const novos = (p.andamentos||[]).map(a=>
+        (a.data===andamentoAntigo.data && a.desc===andamentoAntigo.desc && a.fonte===andamentoAntigo.fonte) ? andamentoEditado : a
+      ).sort((a,b)=>a.data.localeCompare(b.data));
+      return registrarHistorico({...p, andamentos:novos}, `Andamento editado: "${(andamentoAntigo?.desc||"").slice(0,60)}" → "${(andamentoEditado.desc||"").slice(0,60)}"`, usuarioAtual);
+    }));
+    setSelected(s=>{
+      if(!s||s.id!==id) return s;
+      const novos = (s.andamentos||[]).map(a=>
+        (a.data===andamentoAntigo.data && a.desc===andamentoAntigo.desc && a.fonte===andamentoAntigo.fonte) ? andamentoEditado : a
+      ).sort((a,b)=>a.data.localeCompare(b.data));
+      return {...s, andamentos:novos};
+    });
+  };
+  const excluirAndamento = (id, andamentoAlvo) => {
+    if(!confirm("Excluir este andamento? Esta ação não pode ser desfeita.")) return;
+    setProcessos(ps=>ps.map(p=>{
+      if(p.id!==id) return p;
+      const novos = (p.andamentos||[]).filter(a=>
+        !(a.data===andamentoAlvo.data && a.desc===andamentoAlvo.desc && a.fonte===andamentoAlvo.fonte)
+      );
+      return registrarHistorico({...p, andamentos:novos}, `Andamento excluído (${andamentoAlvo?.data}): "${(andamentoAlvo?.desc||"").slice(0,80)}"`, usuarioAtual);
+    }));
+    setSelected(s=>{
+      if(!s||s.id!==id) return s;
+      const novos = (s.andamentos||[]).filter(a=>
+        !(a.data===andamentoAlvo.data && a.desc===andamentoAlvo.desc && a.fonte===andamentoAlvo.fonte)
+      );
       return {...s, andamentos:novos};
     });
   };
@@ -2826,7 +2932,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   };
 
   const saveVinculo = (id, vinculo) => {
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p,vinculo}:p));
+    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p,vinculo}, `Vínculo criado: ${vinculo?.tipo||""}`, usuarioAtual):p));
     setSelected(s=>s&&s.id===id?{...s,vinculo}:s);
   };
   const salvarPartes = (id, partes) => {
@@ -2834,16 +2940,16 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     const parteCliente = partesResolvidas.find(x=>x.clienteId && x.clienteId!==true);
     const autorFinal = nomesPorPolo({partes:partesResolvidas},"autor").join(" e ");
     const reuFinal = nomesPorPolo({partes:partesResolvidas},"reu").join(" e ");
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:p.clienteId}:p));
+    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:p.clienteId}, "Partes do processo editadas", usuarioAtual):p));
     setSelected(s=>s&&s.id===id?{...s, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:s.clienteId}:s);
   };
   const salvarResumoExecutivo = (id, resumo) => {
     const resumoCompleto = {...resumo, ultimaAtualizacao: new Date().toISOString()};
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p, resumoExecutivo: resumoCompleto}:p));
+    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p, resumoExecutivo: resumoCompleto}, "Resumo executivo atualizado", usuarioAtual):p));
     setSelected(s=>s&&s.id===id?{...s, resumoExecutivo: resumoCompleto}:s);
   };
   const removerVinculo = (id) => {
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p,vinculo:null}:p));
+    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p,vinculo:null}, "Vínculo removido", usuarioAtual):p));
     setSelected(s=>s&&s.id===id?{...s,vinculo:null}:s);
   };
 
@@ -2918,10 +3024,10 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const toggleArquivado=(id, arquivado, situacao)=>{
     setProcessos(ps=>ps.map(p=>{
       if(p.id!==id) return p;
-      if(!arquivado) return {...p, arquivado:false, situacaoArquivo:null};
+      if(!arquivado) return registrarHistorico({...p, arquivado:false, situacaoArquivo:null}, "Processo desarquivado", usuarioAtual);
       const novaSituacao = situacao || p.situacaoArquivo || null;
       const novoStatus = novaSituacao==="baixado_definitivo" ? "encerrado" : p.status;
-      return {...p, arquivado:true, situacaoArquivo: novaSituacao, status: novoStatus};
+      return registrarHistorico({...p, arquivado:true, situacaoArquivo: novaSituacao, status: novoStatus}, `Processo arquivado (${novaSituacao||"sem situação"})`, usuarioAtual);
     }));
     setSelected(s=>{
       if(!s||s.id!==id) return s;
@@ -2934,7 +3040,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
 
   // Atribuição rápida de responsável direto na tabela, sem abrir a ficha completa.
   const atribuirResponsavel = (id, nome) => {
-    setProcessos(ps=>ps.map(p=>p.id===id?{...p,responsavel:nome}:p));
+    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p,responsavel:nome}, `Responsável alterado para "${nome}"`, usuarioAtual):p));
     setSelected(s=>s&&s.id===id?{...s,responsavel:nome}:s);
     setAtribuindoRespId(null);
     setRespForm("");
@@ -2982,7 +3088,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
 
   const salvarPrazoDoProcesso = (procId, prazo, ato) => {
     setProcessos(ps=>{
-      const atualizado = ps.map(x=>x.id===procId?{...x,prazo,prazoAto:ato}:x);
+      const atualizado = ps.map(x=>x.id===procId?registrarHistorico({...x,prazo,prazoAto:ato}, `Prazo alterado para ${prazo?fmtData(prazo):"nenhum"}${ato?` — ${ato}`:""}`, usuarioAtual):x);
       const procNovo = atualizado.find(x=>x.id===procId);
       sincronizarTarefaDoPrazo(procNovo);
       return atualizado;
@@ -2993,7 +3099,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   // Marca o prazo do processo como cumprido: limpa o prazo/ato do processo e conclui
   // a tarefa vinculada (se houver), sem precisar abrir a ficha completa do processo.
   const marcarPrazoCumprido = (procId) => {
-    setProcessos(ps=>ps.map(p=>p.id===procId?{...p, prazo:"", prazoAto:""}:p));
+    setProcessos(ps=>ps.map(p=>p.id===procId?registrarHistorico({...p, prazo:"", prazoAto:""}, "Prazo marcado como cumprido", usuarioAtual):p));
     setSelected(s=>s&&s.id===procId?{...s, prazo:"", prazoAto:""}:s);
     if(setTarefas){
       setTarefas(ts=>ts.map(t=>t.origemPrazoProcId===procId?{...t,status:"concluido"}:t));
@@ -3102,8 +3208,8 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       const parteCliente = resolvido.find(x=>x.clienteId && x.clienteId!==true);
       formResolvido = {...form, clienteId: parteCliente ? parteCliente.clienteId : form.clienteId};
     }
-    const salvo = formResolvido.id ? formResolvido : {...formResolvido,id:Date.now(),andamentos:[],documentos:[]};
-    setProcessos(ps=>formResolvido.id?ps.map(p=>p.id===formResolvido.id?formResolvido:p):[...ps,salvo]);
+    const salvo = formResolvido.id ? registrarHistorico(formResolvido, "Processo editado via formulário completo", usuarioAtual) : registrarHistorico({...formResolvido,id:Date.now(),andamentos:[],documentos:[]}, "Processo criado", usuarioAtual);
+    setProcessos(ps=>formResolvido.id?ps.map(p=>p.id===formResolvido.id?salvo:p):[...ps,salvo]);
     sincronizarTarefaDoPrazo(salvo);
     setEditando(null);setNovo(false);
   };
@@ -3382,7 +3488,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
       </div>
       <p style={{fontSize:11,color:"var(--text2)",marginTop:8,textAlign:"right"}}>{lista.length} registro(s)</p>
       {acaoLote&&<ModalAcaoLote tipo={acaoLote} qtd={selecionados.size} clientes={clientes} classificacoes={[...CLASSIFICACOES_VALIDAS,...(classificacoesCustom||[])]} onAplicar={aplicarLote} onClose={()=>setAcaoLote(null)}/>}
-      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} clientes={clientes} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddTarefaProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} tarefasDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirTarefaProc={concluirTarefaProc} onArquivarTarefaProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia} onSaveCampo={(id,campo,valor)=>setProcessos(ps=>ps.map(x=>x.id===id?{...x,[campo]:valor}:x))} onSalvarPrazoProcesso={salvarPrazoDoProcesso} onSalvarPartes={salvarPartes} onSalvarResumo={salvarResumoExecutivo}/>}
+      {selected&&!editando&&<ModalDetalhe p={selected} cliente={clienteDe(selected)} clientes={clientes} processos={processos} onClose={()=>setSelected(null)} onEdit={p=>{setEditando(p);setSelected(null);}} onChecklistUpdate={updateChecklist} onSavePrazo={abrirAnalisePrazo} onSaveDebito={saveDebito} onCumprirPrazo={cumprirPrazo} onToggleArquivado={toggleArquivado} onAddAndamento={addAndamento} onSaveAssunto={saveAssunto} onAddTarefaProcesso={addTarefaProcesso} onSaveDriveLink={saveDriveLink} tarefasDoProcesso={(tarefas||[]).filter(t=>t.procId===selected.id)} onConcluirTarefaProc={concluirTarefaProc} onArquivarTarefaProc={arquivarTarefaProc} onSaveVinculo={saveVinculo} onRemoverVinculo={removerVinculo} onAbrirOutroProcesso={proc=>setSelected(proc)} onRegistrarExito={registrarExito} onSaveAudiencia={saveAudiencia} onSaveCampo={(id,campo,valor)=>setProcessos(ps=>ps.map(x=>x.id===id?registrarHistorico({...x,[campo]:valor}, `Campo "${campo}" alterado para "${valor}"`, usuarioAtual):x))} onSalvarPrazoProcesso={salvarPrazoDoProcesso} onSalvarPartes={salvarPartes} onSalvarResumo={salvarResumoExecutivo} onEditarAndamento={editarAndamento} onExcluirAndamento={excluirAndamento}/>}
       {(editando||novo)&&<ModalFormProc processo={editando} clientes={clientes} onSave={salvar} onClose={()=>{setEditando(null);setNovo(false);}} onNovoCliente={onNovoCliente} classificacoesCustom={classificacoesCustom||[]} onNovaClassificacao={nova=>{ if(setClassificacoesCustom) setClassificacoesCustom(cs=>cs.includes(nova)?cs:[...cs,nova]); }}/>}
       {mapaProc&&<ModalMapa proc={mapaProc} mapaData={mapas[mapaProc.id]||defaultMap()} onChange={data=>setMapas(m=>({...m,[mapaProc.id]:data}))} onClose={()=>setMapaProc(null)}/>}
       {analisandoPrazo&&<ModalConfirmarPrazo proc={analisandoPrazo} sugestao={sugestaoPrazo} dataAndamento={[...(analisandoPrazo.andamentos||[])].sort((a,b)=>b.data.localeCompare(a.data))[0]?.data||""} onConfirm={salvarPrazo} onClose={()=>{setAnalisandoPrazo(null);setSugestaoPrazo(null);}}/>}
@@ -3987,6 +4093,15 @@ function ModalCriarTarefaIntimacao({intimacao, equipe, onConfirm, onClose}){
 // Processos quanto na de Intimações (ex: "Adicionar prazo a partir de publicação"),
 // para que qualquer prazo marcado, de onde quer que venha, sempre gere/atualize a
 // tarefa correspondente em "Prazos e Tarefas".
+// Registra uma alteração no histórico interno do processo (quem mudou, o quê e quando).
+// Esse histórico fica guardado nos dados do processo mas não aparece na interface —
+// existe só como registro de auditoria discreto, caso seja necessário consultar depois.
+function registrarHistorico(processo, resumo, usuarioEmail){
+  const entrada = { data: new Date().toISOString(), usuario: usuarioEmail || "desconhecido", resumo };
+  const historico = [...(processo.historicoAlteracoes||[]), entrada];
+  return { ...processo, historicoAlteracoes: historico };
+}
+
 function sincronizarTarefaDeProcesso(procAtualizado, setTarefas){
   if(!setTarefas) return;
   setTarefas(ts=>{
@@ -4044,6 +4159,26 @@ function aplicarIntimacoesComoAndamentos(novasIntimacoes, setProcessos){
   }));
 }
 
+// A API do DJEN às vezes retorna o teor da publicação como HTML bruto (com tags e
+// entidades como &ccedil;) em vez de texto simples. Esta função extrai só o texto
+// legível, preservando quebras de parágrafo, usando o próprio parser HTML do navegador.
+function limparHtmlParaTexto(conteudo){
+  if(!conteudo) return "";
+  if(!/<[a-z][\s\S]*>/i.test(conteudo)) return conteudo.trim();
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(conteudo, "text/html");
+    doc.querySelectorAll("p, tr, br, div, section, li, header, footer").forEach(el=>{
+      el.insertAdjacentText("afterend", "\n");
+    });
+    let texto = doc.body ? (doc.body.textContent || "") : conteudo;
+    texto = texto.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    return texto;
+  } catch(e) {
+    return conteudo;
+  }
+}
+
 async function buscarPublicacoesDJEN({oabNumero, oabUf, dias, intimacoesAtuais, processos}){
   const hojeObj = new Date();
   const dataFim = hojeObj.toISOString().slice(0,10);
@@ -4065,7 +4200,7 @@ async function buscarPublicacoesDJEN({oabNumero, oabUf, dias, intimacoesAtuais, 
     .map(it=>({
       djenId: String(it.id ?? it.hash ?? it.numero_processo_completo ?? `${it.data_disponibilizacao||it.dataDisponibilizacao||""}-${it.texto||it.teor||""}`.slice(0,80)),
       orgao: it.nome_orgao || it.nomeOrgao || it.siglaTribunal || it.tribunal || "DJEN",
-      texto: it.texto || it.teor || it.resumo || "",
+      texto: limparHtmlParaTexto(it.texto || it.teor || it.resumo || ""),
       dataDisponibilizacao: it.data_disponibilizacao || it.dataDisponibilizacao || it.data || null,
       numeroProcesso: it.numero_processo || it.numeroProcesso || it.numeroprocessocommascara || null,
     }))
@@ -4510,7 +4645,7 @@ Escreva sua resposta como uma lista de linhas de texto simples (uma "linha" = um
 - Para expressões em latim (ex: in fine, de cujus, venire contra factum proprium, data venia), envolva a expressão entre asteriscos simples para que apareça em itálico, assim: *in fine*.
 
 Estrutura obrigatória da peça, nesta ordem:
-1. Endereçamento ao juízo (parágrafo comum, sem prefixo, sem numeração): "EXMO. SR. DR. JUIZ DE DIREITO DA [VARA] DA COMARCA DE [COMARCA] - [ÓRGÃO]". Preencha [VARA] e [COMARCA] usando o campo "Vara/Comarca" do processo (ex: se for "2ª Vara Cível de Itaboraí", então VARA = "2ª VARA CÍVEL" e COMARCA = "ITABORAÍ"). Preencha [ÓRGÃO] com a sigla do tribunal (TJ/RJ para Justiça Estadual, JF/RJ para Justiça Federal) — infira pelo sistema/tipo do processo; se não houver certeza, use "TJ/RJ" como padrão e sinalize a suposição entre colchetes logo após. Omita esta linha inteira se a peça não for dirigida a um juízo (ex: notificação extrajudicial).
+1. Endereçamento ao juízo, com o prefixo "#ENDERECO#" (será exibido em negrito e caixa alta automaticamente, não precisa escrever em caixa alta você mesma): "#ENDERECO#EXMO. SR. DR. JUIZ DE DIREITO DA [VARA] DA COMARCA DE [COMARCA] - [ÓRGÃO]". Preencha [VARA] e [COMARCA] usando o campo "Vara/Comarca" do processo (ex: se for "2ª Vara Cível de Itaboraí", então VARA = "2ª VARA CÍVEL" e COMARCA = "ITABORAÍ"). Preencha [ÓRGÃO] com a sigla do tribunal (TJ/RJ para Justiça Estadual, JF/RJ para Justiça Federal) — infira pelo sistema/tipo do processo; se não houver certeza, use "TJ/RJ" como padrão e sinalize a suposição entre colchetes logo após. Omita esta linha inteira se a peça não for dirigida a um juízo (ex: notificação extrajudicial).
 2. Linha separada: "Processo nº [número do processo]".
 3. Parágrafo único (comum) de qualificação completa das partes disponíveis no contexto, terminando literalmente em "apresentar a presente".
 4. Linha "#TITULO#" com o nome da peça (1 a 2 linhas, será exibido em caixa alta automaticamente).
@@ -4519,7 +4654,11 @@ Estrutura obrigatória da peça, nesta ordem:
 7. Quando houver citação de jurisprudência real e pertinente disponível no contexto (nunca invente), use "#CITACAO#".
 8. Expressões em latim entre asteriscos conforme instruído acima.
 9. Seção final "#SECAO#DOS PEDIDOS" seguida dos itens "#PEDIDO#" (um por linha).
-10. Fechamento, cada um em sua própria linha comum: "Nestes termos," / "Pede deferimento." / cidade e data por extenso (use a cidade do processo/escritório se souber, senão deixe "[Cidade], [data]") / nome da advogada em caixa alta / linha com o número da OAB.
+10. Fechamento: "Nestes termos," / "Pede deferimento." / cidade e data por extenso (use a cidade do processo/escritório se souber, senão deixe "[Cidade], [data]"), cada um em sua própria linha comum — e por fim, SEMPRE estas duas linhas exatas, cada uma com o prefixo "#ASSINATURA#" (nunca altere o nome ou a OAB, mesmo que outro nome apareça em algum lugar do contexto):
+"#ASSINATURA#MICHELLI COSTA DE ABREU"
+"#ASSINATURA#OAB/RJ 155.134"
+
+REGRA FIXA ADICIONAL: sempre que o nome do cliente do escritório (identificado no contexto como "Cliente do escritório neste processo") aparecer em qualquer lugar do texto da peça, escreva-o inteiramente em CAIXA ALTA (ex: "MICHELLI COSTA DE ABREU" em vez de "Michelli Costa de Abreu"). Os demais nomes (parte contrária, terceiros, testemunhas) mantêm capitalização normal.
 
 Formatação geral: parágrafos justificados, sem recuo de primeira linha (blocos separados por espaçamento). Este é um rascunho de apoio — a advogada revisará antes de protocolar.`,
             messages: [{role:"user", content: contexto}]
@@ -4601,7 +4740,7 @@ Formatação geral: parágrafos justificados, sem recuo de primeira linha (bloco
               ✨ Rascunho gerado pela IA — revise com atenção antes de usar/protocolar.
             </div>
             <p style={{fontSize:10.5,color:"var(--text3)",margin:"0 0 8px",lineHeight:1.4}}>
-              Marcações como <code>#TITULO#</code>, <code>#SECAO#</code>, <code>#CITACAO#</code> e <code>#PEDIDO#</code> viram formatação de verdade (título centralizado, seções em negrito, itens com letras, etc.) só no arquivo Word — pode editar o texto livremente, inclusive apagar ou mover essas marcações.
+              Marcações como <code>#ENDERECO#</code>, <code>#TITULO#</code>, <code>#SECAO#</code>, <code>#CITACAO#</code>, <code>#PEDIDO#</code> e <code>#ASSINATURA#</code> viram formatação de verdade (endereçamento em negrito e caixa alta, título centralizado, seções em negrito, itens com letras, assinatura em negrito sem espaço entre linhas, etc.) só no arquivo Word — pode editar o texto livremente, inclusive apagar ou mover essas marcações.
             </p>
             <textarea value={resultado} onChange={e=>setResultado(e.target.value)} style={{width:"100%",minHeight:320,fontSize:12.5,padding:"12px",borderRadius:6,border:"1px solid var(--border2)",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.6,marginBottom:12}}/>
             <div style={{display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
@@ -5461,6 +5600,10 @@ function montarRunsComItalico(texto){
 // (sem prefixo) = parágrafo comum, justificado, espaçamento 1,25, sem recuo de primeira linha
 function montarParagrafoPeca(linhaOriginal, contadorPedido){
   const escaparXml = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  if(linhaOriginal.startsWith("#ENDERECO#")){
+    const texto = linhaOriginal.replace("#ENDERECO#","").trim().toUpperCase();
+    return `<w:p><w:pPr><w:spacing w:after="240" w:line="300" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Cambria" w:hAnsi="Cambria" w:cs="Cambria"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${escaparXml(texto)}</w:t></w:r></w:p>`;
+  }
   if(linhaOriginal.startsWith("#TITULO#")){
     const texto = linhaOriginal.replace("#TITULO#","").trim().toUpperCase();
     return `<w:p><w:pPr><w:spacing w:before="240" w:after="240" w:line="300" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Cambria" w:hAnsi="Cambria" w:cs="Cambria"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${escaparXml(texto)}</w:t></w:r></w:p>`;
@@ -5477,6 +5620,10 @@ function montarParagrafoPeca(linhaOriginal, contadorPedido){
     const texto = linhaOriginal.replace("#PEDIDO#","").trim();
     const letra = String.fromCharCode(97 + contadorPedido.n); contadorPedido.n++;
     return `<w:p><w:pPr><w:spacing w:after="120" w:line="300" w:lineRule="auto"/><w:ind w:left="700" w:hanging="700"/><w:jc w:val="both"/></w:pPr>${montarRunsComItalico(letra+") "+texto)}</w:p>`;
+  }
+  if(linhaOriginal.startsWith("#ASSINATURA#")){
+    const texto = linhaOriginal.replace("#ASSINATURA#","").trim();
+    return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Cambria" w:hAnsi="Cambria" w:cs="Cambria"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${escaparXml(texto)}</w:t></w:r></w:p>`;
   }
   return `<w:p><w:pPr><w:spacing w:after="240" w:line="300" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr>${montarRunsComItalico(linhaOriginal)}</w:p>`;
 }
@@ -5743,6 +5890,7 @@ function AppPrincipal({user}){
           audiencia: parseCampo(p.audiencia, null),
           vinculo: parseCampo(p.vinculo, null),
           resumoExecutivo: parseCampo(p.resumoExecutivo, null),
+          historicoAlteracoes: parseCampo(p.historicoAlteracoes, []),
         })));
         setClientes(rCli.data||[]);
         setParcelas(rParc.data||[]);
@@ -5763,7 +5911,7 @@ function AppPrincipal({user}){
   // "tarefas", "agenda", "clientes" etc. não têm colunas como "andamentos" ou "checklist" —
   // tentar enviá-las (mesmo como undefined) já causava erro "column not found" no Supabase.
   const CAMPOS_JSON_POR_TABELA = {
-    processos: ["andamentos","partes","checklist","exitos","debito","documentos","docChecklist","prazoProcessual","audiencia","vinculo","resumoExecutivo"],
+    processos: ["andamentos","partes","checklist","exitos","debito","documentos","docChecklist","prazoProcessual","audiencia","vinculo","resumoExecutivo","historicoAlteracoes"],
   };
 
   const autoSave = React.useCallback((tabela, dados, delay=1200) => {
@@ -5890,8 +6038,8 @@ function AppPrincipal({user}){
         </div>
       </div>
       <div style={{flex:1,overflow:"auto",padding:"24px 32px"}}>
-        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} agenda={agenda} equipe={equipe} intimacoes={intimacoes} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido}/>}
-        {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom}/>}
+        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} setTarefas={setTarefas} agenda={agenda} equipe={equipe} intimacoes={intimacoes} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido}/>}
+        {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom} usuarioAtual={user?.email||"desconhecido"}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
