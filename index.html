@@ -266,6 +266,7 @@ const ICON_PATHS = {
   user: <><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></>,
   link: <><path d="M9.5 14.5 14.5 9.5"/><path d="M11 6.5 12.5 5a3.5 3.5 0 0 1 5 5L16 11.5"/><path d="M13 17.5 11.5 19a3.5 3.5 0 0 1-5-5L8 12.5"/></>,
   archive: <><rect x="3.5" y="4.5" width="17" height="4.5" rx="1.2"/><path d="M5 9v9a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18V9"/><path d="M10 13h4"/></>,
+  funnel: <><path d="M3.5 4.5h17L14 12.5V19l-4 2v-8.5Z"/></>,
 };
 function Icon({name, size=16, color="currentColor", strokeWidth=1.8, style}){
   const inner = ICON_PATHS[name];
@@ -2760,6 +2761,12 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, ag
     if(d<=3) return {label:"Atenção", bg:"var(--amber-bg)", color:"var(--amber)"};
     return {label:"Pendente", bg:"var(--bg2)", color:"var(--text2)"};
   };
+  // Card único de "vencidos + tarefas pendentes": prazos já vencidos, mais tarefas
+  // pendentes que nem chegaram a ter um prazo definido (senão não apareceriam em
+  // nenhum outro lugar do dashboard).
+  const tarefasSemPrazo = tarefasPendentes.filter(t=>!t.arquivada && !t.prazo);
+  const vencidosETarefasPendentes = [...prazosVencidosCard, ...tarefasSemPrazo];
+  const tagPorUrgenciaOuPendente = (t) => t.prazo ? tagPorUrgencia(t) : {label:"Pendente", bg:"var(--bg2)", color:"var(--text2)"};
   const clienteDeTarefa = (t) => {
     if(t.clienteId){ const c=clientes.find(x=>String(x.id)===String(t.clienteId)); if(c) return c.nome; }
     if(t.procId){ const proc=processos.find(p=>String(p.id)===String(t.procId)); if(proc?.clienteId){ const c=clientes.find(x=>x.id===proc.clienteId); if(c) return c.nome; } }
@@ -2831,18 +2838,18 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, ag
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
         <AlertCard
-          titulo="Prazos vencidos" corIcone="var(--red)" corBg="var(--red-bg)" icone="⚠"
-          numero={prazosVencidosCard.length} sub="requer atenção imediata"
-          itens={prazosVencidosCard.map(t=>({titulo:t.titulo, sub:clienteDeTarefa(t)||"—", tag:tagPorUrgencia(t), onClick:()=>abrirTarefaDashboard(t)}))}
-          vazio="Nenhum prazo vencido. 🎉"
-          verTodosLabel="Ver todos os prazos vencidos" onVerTodos={()=>onIrPara("tarefas")}
+          titulo="Prazos vencidos e tarefas pendentes" corIcone="var(--red)" corBg="var(--red-bg)" icone="⚠"
+          numero={vencidosETarefasPendentes.length} sub="requer atenção imediata"
+          itens={vencidosETarefasPendentes.map(t=>({titulo:t.titulo, sub:clienteDeTarefa(t)||"—", tag:tagPorUrgenciaOuPendente(t), onClick:()=>abrirTarefaDashboard(t)}))}
+          vazio="Nenhum prazo vencido ou tarefa pendente. 🎉"
+          verTodosLabel="Ver todos" onVerTodos={()=>onIrPara("tarefas")}
         />
         <AlertCard
-          titulo="Prazos próximos (7d)" corIcone="var(--amber)" corBg="var(--amber-bg)" icone="⏱"
+          titulo="Prazos próximos" corIcone="var(--amber)" corBg="var(--amber-bg)" icone="⏱"
           numero={prazosProximos7d.length} sub={`${prazosVencendoHoje} vencem hoje · ${prazosUrgentes3d} urgentes`}
           itens={prazosProximos7d.map(t=>({titulo:t.titulo, sub:clienteDeTarefa(t)||"—", tag:tagPorUrgencia(t), onClick:()=>abrirTarefaDashboard(t)}))}
           vazio="Nenhum prazo nos próximos 7 dias."
-          verTodosLabel="Ver todos os prazos de hoje" onVerTodos={()=>onIrPara("tarefas")}
+          verTodosLabel="Ver todos" onVerTodos={()=>onIrPara("tarefas")}
         />
         <AlertCard
           titulo="Compromissos de hoje" corIcone="var(--green)" corBg="var(--green-bg)" icone="📅"
@@ -2853,141 +2860,45 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, ag
         />
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12,marginBottom:16}}>
         <KpiCard label="Processos ativos" value={ativos.length} sub={`de ${processos.length} no total`} color="var(--navy2)" icon="📂" onClick={()=>onIrPara("processos")}/>
-        <div style={{position:"relative"}}>
-          <KpiCard label="Prazos urgentes ≤7d" value={prazosProximos7d.length} sub="requer atenção imediata" color="var(--red)" icon="⚠" onClick={()=>setMostrarUrgentes(v=>!v)}/>
-          {mostrarUrgentes && (
-            <div onMouseLeave={()=>setMostrarUrgentes(false)} style={{position:"absolute",top:"100%",left:0,right:0,marginTop:6,background:"#fff",border:"1px solid var(--border1)",borderRadius:10,boxShadow:"0 14px 32px rgba(28,26,23,.14)",zIndex:30,overflow:"hidden"}}>
-              {prazosProximos7d.length===0 ? (
-                <p style={{fontSize:12,color:"var(--text2)",padding:"14px 16px",margin:0}}>Nenhum prazo urgente nos próximos 7 dias. 🎉</p>
-              ) : prazosProximos7d.map((t,idx)=>(
-                <div key={t.id} onClick={()=>{onVerPrazoRapido(t);setMostrarUrgentes(false);}} style={{padding:"10px 16px",borderBottom:idx<prazosProximos7d.length-1?"1px solid var(--border1)":"none",cursor:"pointer"}}>
-                  <p style={{fontSize:12.5,fontWeight:600,color:"var(--text1)",margin:"0 0 2px"}}>{t.titulo}</p>
-                  <p style={{fontSize:11,color:"var(--text2)",margin:0}}>{clienteDeTarefa(t)||"—"} · {fmtData(t.prazo)}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
         <KpiCard label="Clientes ativos" value={clientes.length} sub="cadastrados no CRM" color="var(--purple)" icon="👤" onClick={()=>onIrPara("clientes")}/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12,marginBottom:16}}>
-        <KpiCard label="Prazos e tarefas pendentes" value={tarefasPendentes.length} sub={tarefasAtrasadas.length>0?`${tarefasAtrasadas.length} atrasada(s)`:"em dia"} color={tarefasAtrasadas.length>0?"var(--red)":"var(--accent)"} icon="✅" onClick={()=>onIrPara("tarefas")}/>
-        <KpiCard label="Compromissos hoje" value={compromissosHoje.length} sub={(equipe||[]).length+" na equipe"} color="var(--green)" icon="📅" onClick={()=>onIrPara("agenda")}/>
-      </div>
 
-      {prazosAbertos.filter(p=>diasRest(p.data)<0).length>0&&(
-        <div style={{background:"var(--red-bg)",border:"1px solid #F3B8B8",borderRadius:8,padding:"10px 16px",marginBottom:10,fontSize:12.5,color:"var(--red)"}}>
-          <strong style={{textTransform:"uppercase",letterSpacing:".5px",marginRight:8}}>⚠ Prazos em aberto vencidos:</strong>
-          {prazosAbertos.filter(p=>diasRest(p.data)<0).map((item,i)=>(
-            <span key={i} onClick={()=>onAbrirProcesso(item.proc)} style={{marginRight:12,cursor:"pointer",textDecoration:"underline"}}>{item.proc.numero.split("-")[0]}… — {item.tipo} ({Math.abs(diasRest(item.data))}d atraso)</span>
-          ))}
-        </div>
-      )}
-      {prazosAbertos.filter(p=>diasRest(p.data)>=0&&diasRest(p.data)<=7).length>0&&(
-        <div style={{background:"var(--amber-bg)",border:"1px solid #F5CE85",borderRadius:8,padding:"10px 16px",marginBottom:16,fontSize:12.5,color:"var(--amber)"}}>
-          <strong style={{textTransform:"uppercase",letterSpacing:".5px",marginRight:8}}>⏱ Prazos em aberto próximos:</strong>
-          {prazosAbertos.filter(p=>diasRest(p.data)>=0&&diasRest(p.data)<=7).map((item,i)=>(
-            <span key={i} onClick={()=>onAbrirProcesso(item.proc)} style={{marginRight:12,cursor:"pointer",textDecoration:"underline"}}>{item.proc.numero.split("-")[0]}… — {item.tipo} ({diasRest(item.data)}d)</span>
-          ))}
-        </div>
-      )}
-
-      <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:14,marginBottom:14}}>
-        <div style={{background:"#fff",borderRadius:8,border:"1px solid var(--border1)",padding:"18px 20px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <p style={{fontSize:12,fontWeight:700,color:"var(--navy)",margin:0,textTransform:"uppercase",letterSpacing:".4px"}}>Prazos e tarefas de hoje</p>
-            <button onClick={()=>onIrPara("tarefas")} style={{fontSize:11,color:"var(--accent)",background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Ver quadro →</button>
-          </div>
-          {(() => {
-            const hojeStr = hoje.toISOString().slice(0,10);
-            const tarefasHoje = (tarefas||[]).filter(t=>!t.arquivada && t.status!=="concluido" && t.prazo===hojeStr);
-            const tarefasAtrasadasHoje = (tarefas||[]).filter(t=>!t.arquivada && t.status!=="concluido" && t.prazo && t.prazo<hojeStr);
-            const todasParaHoje = [...tarefasAtrasadasHoje, ...tarefasHoje];
-            if(todasParaHoje.length===0) return <p style={{fontSize:12,color:"var(--text2)"}}>Nenhum prazo ou tarefa para hoje. 🎉</p>;
-            return (
-              <div style={{display:"flex",flexDirection:"column",gap:0}}>
-                {todasParaHoje.slice(0,6).map((t,i)=>{
-                  const atrasada = t.prazo < hojeStr;
-                  const pCfg = PRIORIDADE_CFG[t.prioridade] || PRIORIDADE_CFG.media;
-                  return (
-                    <div key={t.id} onClick={()=>onIrPara("tarefas")} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<Math.min(todasParaHoje.length,6)-1?"1px solid var(--border1)":"none",cursor:"pointer"}}>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:pCfg.color,flexShrink:0}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <p style={{fontSize:12,fontWeight:600,margin:"0 0 1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.titulo}</p>
-                        <p style={{fontSize:10.5,color:"var(--text2)",margin:0}}>{STATUS_TAREFA_CFG[t.status]?.label}</p>
-                      </div>
-                      {atrasada && <span style={{fontSize:9.5,fontWeight:700,color:"var(--red)",background:"var(--red-bg)",padding:"2px 7px",borderRadius:4,whiteSpace:"nowrap"}}>atrasada</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
         <div style={{background:"#fff",borderRadius:8,border:"1px solid var(--border1)",padding:"18px 20px"}}>
           <p style={{fontSize:12,fontWeight:700,color:"var(--navy)",margin:"0 0 14px",textTransform:"uppercase",letterSpacing:".4px"}}>Por classificação</p>
           <DonutChart data={classifChart}/>
         </div>
+        <div style={{background:"#fff",borderRadius:8,border:"1px solid var(--border1)",padding:"18px 20px"}}>
+          <p style={{fontSize:12,fontWeight:700,color:"var(--navy)",margin:"0 0 12px",textTransform:"uppercase",letterSpacing:".4px"}}>Financeiro — {hoje.toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</p>
+          <div style={{display:"flex",flexDirection:"column",gap:9}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:12,color:"var(--text2)"}}>Previsão do mês</span><strong style={{fontSize:13,color:"var(--navy)"}}>{fmtBRL(previsaoMes)}</strong></div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:12,color:"var(--text2)"}}>Recebido no mês</span>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <strong style={{fontSize:13,color:"var(--green)"}}>{fmtBRL(recebidoMes)}</strong>
+                {variacaoRecebido!==null && <span style={{fontSize:10,fontWeight:700,color:variacaoRecebido>=0?"var(--green)":"var(--red)"}}>{variacaoRecebido>=0?"▲":"▼"} {Math.abs(variacaoRecebido)}%</span>}
+              </div>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:12,color:"var(--text2)"}}>Em aberto no mês</span><strong style={{fontSize:13,color:"var(--accent)"}}>{fmtBRL(abertoMes)}</strong></div>
+            <div style={{borderTop:"1px solid var(--border1)",margin:"4px 0"}}/>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:11.5,color:"var(--text2)"}}>Total vencido (geral)</span><strong style={{fontSize:12.5,color:"var(--red)"}}>{fmtBRL(totalVencidoFin)}</strong></div>
+          </div>
+          <button onClick={()=>onIrPara("financeiro")} style={{...btnSec,fontSize:11,padding:"6px 12px",marginTop:12,width:"100%"}}>Ver financeiro</button>
+        </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr",gap:14}}>
         <div style={{background:"#fff",borderRadius:8,border:"1px solid var(--border1)",padding:"18px 20px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <p style={{fontSize:12,fontWeight:700,color:"var(--navy)",margin:0,textTransform:"uppercase",letterSpacing:".4px"}}>Prazos em aberto (próximos 30 dias)</p>
-            <button onClick={()=>onIrPara("processos")} style={{fontSize:11,color:"var(--accent)",background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Ver todos →</button>
-          </div>
-          {prazosAbertos.length===0?<p style={{fontSize:12,color:"var(--text2)"}}>Nenhum prazo em aberto nos próximos 30 dias.</p>:
-          <div style={{display:"flex",flexDirection:"column",gap:0}}>
-            {prazosAbertos.slice(0,8).map((item,i)=>{
-              const d=diasRest(item.data);
-              const urgente = d<=3;
-              const tarefaVinculada = (tarefas||[]).find(t=>t.origemPrazoProcId===item.proc.id && !t.arquivada);
-              return (
-                <div key={i} onClick={()=>onVerPrazoRapido(tarefaVinculada || {id:`proc-${item.proc.id}`, titulo:item.tipo, prazo:item.data, status:"pendente", procId:item.proc.id, clienteId:item.proc.clienteId})} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<Math.min(prazosAbertos.length,8)-1?"1px solid var(--border1)":"none",cursor:"pointer"}}>
-                  <div style={{width:38,height:38,borderRadius:7,background:urgente?"var(--red-bg)":"var(--amber-bg)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <span style={{fontSize:13,fontWeight:700,color:urgente?"var(--red)":"var(--amber)"}}>{d}d</span>
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p style={{fontSize:12,fontWeight:600,margin:"0 0 1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.tipo}</p>
-                    <p style={{fontSize:10.5,color:"var(--text2)",margin:0,fontFamily:"monospace"}}>{item.proc.numero}</p>
-                  </div>
-                  <span style={{fontSize:10.5,color:"var(--text2)",whiteSpace:"nowrap"}}>{fmtData(item.data)}</span>
-                </div>
-              );
-            })}
-          </div>}
-        </div>
-
-        <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div style={{background:"#fff",borderRadius:8,border:"1px solid var(--border1)",padding:"18px 20px"}}>
-            <p style={{fontSize:12,fontWeight:700,color:"var(--navy)",margin:"0 0 12px",textTransform:"uppercase",letterSpacing:".4px"}}>Financeiro — {hoje.toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</p>
-            <div style={{display:"flex",flexDirection:"column",gap:9}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:12,color:"var(--text2)"}}>Previsão do mês</span><strong style={{fontSize:13,color:"var(--navy)"}}>{fmtBRL(previsaoMes)}</strong></div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:12,color:"var(--text2)"}}>Recebido no mês</span>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <strong style={{fontSize:13,color:"var(--green)"}}>{fmtBRL(recebidoMes)}</strong>
-                  {variacaoRecebido!==null && <span style={{fontSize:10,fontWeight:700,color:variacaoRecebido>=0?"var(--green)":"var(--red)"}}>{variacaoRecebido>=0?"▲":"▼"} {Math.abs(variacaoRecebido)}%</span>}
-                </div>
+          <p style={{fontSize:12,fontWeight:700,color:"var(--navy)",margin:"0 0 10px",textTransform:"uppercase",letterSpacing:".4px"}}>Movimentações recentes</p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {ultimasMovs.map((m,i)=>(
+              <div key={i} onClick={()=>onAbrirProcesso(m.proc)} style={{cursor:"pointer",paddingBottom:8,borderBottom:i<ultimasMovs.length-1?"1px solid var(--border1)":"none"}}>
+                <p style={{fontSize:11,margin:"0 0 2px",lineHeight:1.3}}>{m.desc.length>60?m.desc.slice(0,60)+"…":m.desc}</p>
+                <p style={{fontSize:9.5,color:"var(--text3)",margin:0}}>{fmtData(m.data)} · {m.proc.numero.split("-")[0]}…</p>
               </div>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:12,color:"var(--text2)"}}>Em aberto no mês</span><strong style={{fontSize:13,color:"var(--accent)"}}>{fmtBRL(abertoMes)}</strong></div>
-              <div style={{borderTop:"1px solid var(--border1)",margin:"4px 0"}}/>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:11.5,color:"var(--text2)"}}>Total vencido (geral)</span><strong style={{fontSize:12.5,color:"var(--red)"}}>{fmtBRL(totalVencidoFin)}</strong></div>
-            </div>
-            <button onClick={()=>onIrPara("financeiro")} style={{...btnSec,fontSize:11,padding:"6px 12px",marginTop:12,width:"100%"}}>Ver financeiro</button>
-          </div>
-          <div style={{background:"#fff",borderRadius:8,border:"1px solid var(--border1)",padding:"18px 20px",flex:1}}>
-            <p style={{fontSize:12,fontWeight:700,color:"var(--navy)",margin:"0 0 10px",textTransform:"uppercase",letterSpacing:".4px"}}>Movimentações recentes</p>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {ultimasMovs.map((m,i)=>(
-                <div key={i} onClick={()=>onAbrirProcesso(m.proc)} style={{cursor:"pointer",paddingBottom:8,borderBottom:i<ultimasMovs.length-1?"1px solid var(--border1)":"none"}}>
-                  <p style={{fontSize:11,margin:"0 0 2px",lineHeight:1.3}}>{m.desc.length>60?m.desc.slice(0,60)+"…":m.desc}</p>
-                  <p style={{fontSize:9.5,color:"var(--text3)",margin:0}}>{fmtData(m.data)} · {m.proc.numero.split("-")[0]}…</p>
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -3950,6 +3861,158 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     </div>
   );
 }
+// ══════════════════════════════════════════════════════════════════════
+// CAPTAÇÃO DE LEADS — leads recebidos pelo formulário de contato do site
+// institucional, integrados via tabela "leads" no mesmo projeto Supabase.
+// ══════════════════════════════════════════════════════════════════════
+const STATUS_LEAD_VALIDOS = ["novo","contatado","reuniao","proposta","ganho","perdido"];
+const STATUS_LEAD_CFG = {
+  novo:      {label:"Novo",       dot:"#8A93A6", bg:"var(--bg2)"},
+  contatado: {label:"Contatado",  dot:"var(--accent)", bg:"var(--accent-light)"},
+  reuniao:   {label:"Reunião",    dot:"#5B8AA6", bg:"#E7F1F6"},
+  proposta:  {label:"Proposta",   dot:"var(--amber)", bg:"var(--amber-bg)"},
+  ganho:     {label:"Ganho",      dot:"var(--green)", bg:"var(--green-bg)"},
+  perdido:   {label:"Perdido",    dot:"var(--red)", bg:"var(--red-bg)"},
+};
+
+// Formata a origem do lead a partir dos campos de UTM (ex: "google / cpc / campanha_inventario"),
+// caindo para o campo "origem" (ex: "site") quando não há dados de UTM.
+function formatarOrigemLead(l){
+  const partes = [l.utm_source, l.utm_medium, l.utm_campaign].filter(Boolean);
+  if(partes.length) return partes.join(" / ");
+  return l.origem || "site";
+}
+function linkWhatsapp(telefone){
+  const digitos = (telefone||"").replace(/\D/g,"");
+  if(!digitos) return null;
+  const comDDI = digitos.startsWith("55") ? digitos : "55"+digitos;
+  return `https://wa.me/${comDDI}`;
+}
+
+function CardLeadCaptacao({lead, onDragStart, onSalvarObservacoes, onSalvarResponsavel, onConverterCliente, onAbrirCliente}){
+  const [obsLocal, setObsLocal] = useState(lead.observacoes||"");
+  const [convertendo, setConvertendo] = useState(false);
+  const wa = linkWhatsapp(lead.telefone);
+
+  return (
+    <div
+      draggable
+      onDragStart={e=>onDragStart(e, lead.id)}
+      style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"12px 13px",marginBottom:9,cursor:"grab",boxShadow:"0 1px 2px rgba(28,26,23,.05)"}}
+    >
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
+        <p style={{fontSize:13,fontWeight:700,margin:0,color:"var(--text1)"}}>{lead.nome}</p>
+        {lead.cliente_id && <span style={{fontSize:9,fontWeight:700,color:"var(--green)",background:"var(--green-bg)",borderRadius:4,padding:"2px 6px",whiteSpace:"nowrap"}}>✓ cliente</span>}
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+        {lead.area && <span style={{fontSize:10,fontWeight:600,color:"var(--navy2)",background:"var(--bg2)",borderRadius:4,padding:"2px 7px"}}>{lead.area}</span>}
+        {wa && <a href={wa} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:10.5,fontWeight:600,color:"#2E9E5B",textDecoration:"none",display:"flex",alignItems:"center",gap:3}}>📱 WhatsApp</a>}
+      </div>
+      {lead.mensagem && <p style={{fontSize:11.5,color:"var(--text2)",margin:"0 0 8px",lineHeight:1.4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical"}}>{lead.mensagem}</p>}
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:9.5,color:"var(--text3)",marginBottom:8}}>
+        <span>{formatarOrigemLead(lead)}</span>
+        <span>{lead.criado_em ? fmtData(lead.criado_em.slice(0,10)) : "—"}</span>
+      </div>
+      <textarea
+        value={obsLocal}
+        onChange={e=>setObsLocal(e.target.value)}
+        onBlur={()=>{ if(obsLocal!==(lead.observacoes||"")) onSalvarObservacoes(lead.id, obsLocal); }}
+        placeholder="Observações…"
+        style={{width:"100%",fontSize:11,padding:"6px 8px",borderRadius:5,border:"1px solid var(--border2)",resize:"vertical",minHeight:36,boxSizing:"border-box",fontFamily:"inherit",marginBottom:8}}
+      />
+      {!lead.cliente_id ? (
+        <button
+          onClick={async ()=>{ setConvertendo(true); await onConverterCliente(lead); setConvertendo(false); }}
+          disabled={convertendo}
+          style={{width:"100%",fontSize:10.5,padding:"6px 8px",borderRadius:5,border:"1px solid var(--accent)",background:"#fff",color:"var(--accent)",cursor:"pointer",fontWeight:600,opacity:convertendo?.6:1}}
+        >{convertendo?"Convertendo…":"→ Converter em cliente"}</button>
+      ) : (
+        <button onClick={onAbrirCliente} style={{width:"100%",fontSize:10.5,padding:"6px 8px",borderRadius:5,border:"1px solid var(--border2)",background:"var(--bg2)",color:"var(--text2)",cursor:"pointer",fontWeight:600}}>Ver na lista de clientes</button>
+      )}
+    </div>
+  );
+}
+
+function PaginaCaptacao({leads, onMoverStatus, onSalvarObservacoes, onSalvarResponsavel, onConverterCliente, onAbrirCliente}){
+  const [busca,setBusca] = useState("");
+  const [filtroArea,setFiltroArea] = useState("");
+  const [filtroStatus,setFiltroStatus] = useState("");
+  const [colunaAlvo,setColunaAlvo] = useState(null);
+  const dragId = React.useRef(null);
+
+  const areas = useMemo(()=>{
+    const s = new Set((leads||[]).map(l=>l.area).filter(Boolean));
+    return [...s].sort();
+  }, [leads]);
+
+  const filtrados = useMemo(()=>{
+    const q = busca.trim().toLowerCase();
+    return (leads||[]).filter(l=>{
+      if(filtroArea && l.area!==filtroArea) return false;
+      if(q && !(l.nome||"").toLowerCase().includes(q) && !(l.telefone||"").includes(q) && !(l.email||"").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [leads, busca, filtroArea]);
+
+  const onDragStart = (e, id) => { dragId.current = id; e.dataTransfer.effectAllowed = "move"; };
+  const onDrop = (status) => {
+    if(dragId.current!=null) onMoverStatus(dragId.current, status);
+    dragId.current = null;
+    setColunaAlvo(null);
+  };
+
+  const colunasParaMostrar = filtroStatus ? [filtroStatus] : STATUS_LEAD_VALIDOS;
+
+  return (
+    <div>
+      <div style={{marginBottom:18}}>
+        <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Captação</h1>
+        <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>Leads recebidos pelo formulário de contato do site — arraste o card entre as colunas para mudar o status.</p>
+      </div>
+
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+        <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por nome, telefone ou e-mail…" style={{...inp,flex:1,minWidth:220}}/>
+        <select value={filtroArea} onChange={e=>setFiltroArea(e.target.value)} style={{...inp,width:"auto",padding:"7px 10px"}}>
+          <option value="">Todas as áreas</option>
+          {areas.map(a=><option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{...inp,width:"auto",padding:"7px 10px"}}>
+          <option value="">Todos os status</option>
+          {STATUS_LEAD_VALIDOS.map(s=><option key={s} value={s}>{STATUS_LEAD_CFG[s].label}</option>)}
+        </select>
+      </div>
+
+      <div style={{display:"flex",gap:14,overflowX:"auto",paddingBottom:8,alignItems:"start"}}>
+        {colunasParaMostrar.map(statusKey=>{
+          const cfg = STATUS_LEAD_CFG[statusKey];
+          const itens = filtrados.filter(l=>l.status===statusKey).sort((a,b)=>(b.criado_em||"").localeCompare(a.criado_em||""));
+          const emAlvo = colunaAlvo===statusKey;
+          return (
+            <div
+              key={statusKey}
+              onDragOver={e=>{e.preventDefault();setColunaAlvo(statusKey);}}
+              onDragLeave={()=>setColunaAlvo(c=>c===statusKey?null:c)}
+              onDrop={e=>{e.preventDefault();onDrop(statusKey);}}
+              style={{background:emAlvo?"var(--accent-light)":"var(--bg2)",borderRadius:10,padding:"12px",minHeight:160,width:filtroStatus?"100%":280,flexShrink:0,transition:"background .15s",border:emAlvo?"1px dashed var(--accent)":"1px dashed transparent"}}
+            >
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"0 2px"}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:cfg.dot}}/>
+                <span style={{fontSize:11.5,fontWeight:700,color:"var(--text1)",textTransform:"uppercase",letterSpacing:".4px"}}>{cfg.label}</span>
+                <span style={{fontSize:11,color:"var(--text2)",marginLeft:"auto"}}>{itens.length}</span>
+              </div>
+              {itens.length===0 ? (
+                <div style={{fontSize:11.5,color:"var(--text3)",textAlign:"center",padding:"20px 0"}}>Nenhum lead aqui</div>
+              ) : itens.map(l=>(
+                <CardLeadCaptacao key={l.id} lead={l} onDragStart={onDragStart} onSalvarObservacoes={onSalvarObservacoes} onSalvarResponsavel={onSalvarResponsavel} onConverterCliente={onConverterCliente} onAbrirCliente={onAbrirCliente}/>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clienteParaAbrir, onClienteAberto, documentosCliente, onAdicionarDocumento, onExcluirDocumento}){
   const [busca,setBusca]=useState("");
   const [editando,setEditando]=useState(null);
@@ -6609,6 +6672,48 @@ function AppPrincipal({user}){
     excluirNoSupabase("documentos_cliente", id);
   };
 
+  // ── Captação de leads (formulário de contato do site institucional) ──
+  const [leadsCaptacao, setLeadsCaptacao] = useState([]);
+  const moverStatusLead = async (id, novoStatus) => {
+    setLeadsCaptacao(ls=>ls.map(l=>l.id===id?{...l,status:novoStatus}:l));
+    if(sb){
+      try { const {error} = await sb.from("leads").update({status:novoStatus}).eq("id", id); if(error) throw error; }
+      catch(e){ console.error("Erro ao mover lead de status:", e); }
+    }
+  };
+  const salvarObservacoesLead = async (id, observacoes) => {
+    setLeadsCaptacao(ls=>ls.map(l=>l.id===id?{...l,observacoes}:l));
+    if(sb){
+      try { const {error} = await sb.from("leads").update({observacoes}).eq("id", id); if(error) throw error; }
+      catch(e){ console.error("Erro ao salvar observações do lead:", e); }
+    }
+  };
+  const salvarResponsavelLead = async (id, responsavel) => {
+    setLeadsCaptacao(ls=>ls.map(l=>l.id===id?{...l,responsavel}:l));
+    if(sb){
+      try { const {error} = await sb.from("leads").update({responsavel}).eq("id", id); if(error) throw error; }
+      catch(e){ console.error("Erro ao salvar responsável do lead:", e); }
+    }
+  };
+  // Converte o lead em cliente de verdade: cria a linha em "clientes" (reaproveitando
+  // o autoSave já existente para essa tabela) e grava o id de volta no lead, fechando
+  // o ciclo pra depois cruzar parcelas → clientes → leads → utm_source.
+  const converterLeadEmCliente = async (lead) => {
+    const novoClienteId = Date.now();
+    const novoCliente = {
+      id: novoClienteId, nome: lead.nome||"", telefone: lead.telefone||"", email: lead.email||"",
+      cpf:"", rg:"", endereco:"", profissao:"", estadoCivil:"", nacionalidade:"brasileiro(a)",
+      obs: `Convertido do lead de captação (origem: ${lead.origem||"site"}${lead.area?`, área: ${lead.area}`:""}).`,
+    };
+    setClientes(cs=>[...cs, novoCliente]);
+    setLeadsCaptacao(ls=>ls.map(l=>l.id===lead.id?{...l, cliente_id:novoClienteId, status: l.status==="novo"?"contatado":l.status}:l));
+    if(sb){
+      try { const {error} = await sb.from("leads").update({cliente_id: novoClienteId}).eq("id", lead.id); if(error) throw error; }
+      catch(e){ console.error("Erro ao gravar cliente_id no lead:", e); }
+    }
+    return novoClienteId;
+  };
+
   const [oabNumeroConfig, setOabNumeroConfig] = useState(()=>{
     try { return localStorage.getItem("djen_oabNumero") || "155134"; } catch(e){ return "155134"; }
   });
@@ -6767,13 +6872,19 @@ function AppPrincipal({user}){
     (async () => {
       if(!sb){ setErroCarregamento(sbErroInicial||"Sem conexão com o banco."); setCarregandoDados(false); return; }
       try {
-        const tabelas = ["processos","clientes","parcelas","despesas","tarefas","agenda","equipe","intimacoes","leads_atendimento","documentos_cliente"];
+        const tabelas = ["processos","clientes","parcelas","despesas","tarefas","agenda","equipe","intimacoes","leads_atendimento","documentos_cliente","leads"];
+        // Tabelas alimentadas por formulários públicos (sem login) não têm coluna
+        // user_id — são de escopo único do escritório, protegidas só por RLS
+        // (autenticado vê tudo, anônimo só insere). Consultar essas com
+        // .eq("user_id", uidUser) causaria erro de coluna inexistente.
+        const tabelasSemUserId = new Set(["leads_atendimento","leads"]);
         // Cada tabela é carregada de forma independente: se uma tabela ainda não existir no
         // Supabase (ex: "intimacoes" não criada), o sistema não trava inteiro — só aquela
         // parte fica vazia, e um aviso aparece no rodapé da barra lateral.
         const resultados = await Promise.all(tabelas.map(async t=>{
           try {
-            const r = await sb.from(t).select("*").eq("user_id", uidUser);
+            const query = sb.from(t).select("*");
+            const r = await (tabelasSemUserId.has(t) ? query : query.eq("user_id", uidUser));
             if(r.error) throw r.error;
             return r;
           } catch(e){
@@ -6784,7 +6895,7 @@ function AppPrincipal({user}){
         const tabelasFaltando = resultados.filter(r=>r._tabelaFaltando).map(r=>r._tabelaFaltando);
         if(tabelasFaltando.length) setAvisoTabelasFaltando(tabelasFaltando);
         if(!ativo) return;
-        const [rProc, rCli, rParc, rDesp, rTar, rAg, rEq, rInt, rLeads, rDocsCli] = resultados;
+        const [rProc, rCli, rParc, rDesp, rTar, rAg, rEq, rInt, rLeads, rDocsCli, rLeadsCaptacao] = resultados;
         const parseCampo = (v, fallback) => { if(v===undefined||v===null) return fallback; if(typeof v==="string"){ try { return JSON.parse(v); } catch(_) { return fallback; } } return v; };
         // Importante: NUNCA cair de volta para os dados de teste (PROCS0/CLIENTES0/FINANC0/EQUIPE0)
         // quando a tabela estiver vazia — isso fazia os dados de teste "reaparecerem" toda vez
@@ -6813,6 +6924,7 @@ function AppPrincipal({user}){
         setIntimacoes(rInt.data||[]);
         setLeadsAtendimento((rLeads.data||[]).filter(l=>l.status!=="processado"));
         setDocumentosCliente(rDocsCli.data||[]);
+        setLeadsCaptacao(rLeadsCaptacao.data||[]);
       } catch(e) {
         setErroCarregamento(e.message || "Erro ao carregar dados.");
       }
@@ -6902,6 +7014,7 @@ function AppPrincipal({user}){
     {id:"dashboard", label:"Visão Geral", icon:"house"},
     {id:"processos", label:"Processos", icon:"folder"},
     {id:"clientes", label:"Clientes", icon:"users"},
+    {id:"captacao", label:"Captação", icon:"funnel"},
     {id:"tarefas", label:"Prazos e Tarefas", icon:"checkSquare"},
     {id:"agenda", label:"Agenda", icon:"calendar"},
     {id:"financeiro", label:"Financeiro", icon:"wallet"},
@@ -6955,6 +7068,7 @@ function AppPrincipal({user}){
         {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} setTarefas={setTarefas} agenda={agenda} equipe={equipe} intimacoes={intimacoes} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido} leadsAtendimento={leadsAtendimento} onLeadProcessado={marcarLeadProcessado} onDescartarLead={descartarLead} classificacoesCustom={classificacoesCustom}/>}
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom} usuarioAtual={user?.email||"desconhecido"}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)} documentosCliente={documentosCliente} onAdicionarDocumento={adicionarDocumentoCliente} onExcluirDocumento={excluirDocumentoCliente}/>}
+        {pagina==="captacao" && <PaginaCaptacao leads={leadsCaptacao} onMoverStatus={moverStatusLead} onSalvarObservacoes={salvarObservacoesLead} onSalvarResponsavel={salvarResponsavelLead} onConverterCliente={converterLeadEmCliente} onAbrirCliente={()=>setPagina("clientes")}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos}/>}
