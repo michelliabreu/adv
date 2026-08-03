@@ -1680,23 +1680,7 @@ Use string vazia "" em qualquer campo que não puder ser determinado com seguran
     if(!criado) return;
     setErroProcuracao(""); setGerandoProcuracao(true);
     try {
-      const c = criado.cliente;
-      const qualificacao = [c.nome?.toUpperCase(), c.nacionalidade, c.estadoCivil, c.profissao].filter(Boolean).join(", ")
-        + (c.rg?`, portador(a) da cédula de identidade RG nº ${c.rg}`:"")
-        + (c.cpf?`, inscrito(a) no CPF sob o nº ${c.cpf}`:"")
-        + (c.endereco?`, residente e domiciliado(a) em ${c.endereco}`:"") + ".";
-      const conteudo = [
-        "#TITULO#Procuração",
-        `Pelo presente instrumento particular de mandato, ${qualificacao}, na qualidade de OUTORGANTE, nomeia e constitui sua bastante procuradora`,
-        "#ASSINATURA#MICHELLI COSTA DE ABREU",
-        "#ASSINATURA#OAB/RJ 155.134",
-        `à qual confere amplos poderes para o foro em geral, podendo propor contra quem de direito as ações competentes e defendê-la nas contrárias, seguindo umas e outras até final decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda poderes especiais para confessar, desistir, transigir, firmar compromissos ou acordos, receber e dar quitação, agir em conjunto ou separadamente, substabelecer esta a outrem, com ou sem reservas de iguais poderes, dar e receber citação, tudo em direito permitido, relativamente à causa em que a(o) OUTORGANTE figura como parte interessada.`,
-        `Itaboraí, ${hoje.toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}.`,
-        `#ASSINATURA#${(c.nome||"").toUpperCase()}`,
-        "#ASSINATURA#OUTORGANTE",
-      ].join("\n");
-      const nomeArquivo = "Procuracao_"+(c.nome||"cliente").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"_").slice(0,50);
-      await gerarDocumentoTimbrado(nomeArquivo, conteudo);
+      await gerarProcuracaoParaCliente(criado.cliente);
     } catch(e) {
       setErroProcuracao(e.message || "Não foi possível gerar a procuração.");
     }
@@ -1787,6 +1771,8 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
   const [modoMultiplo,setModoMultiplo]=useState(()=>temListaPartes(processo||{}));
   const [criandoClassificacao,setCriandoClassificacao]=useState(false);
   const [novaClassifTexto,setNovaClassifTexto]=useState("");
+  const [analisandoDoc,setAnalisandoDoc]=useState(false);
+  const [erroDoc,setErroDoc]=useState("");
   const s=(k,v)=>setF(x=>({...x,[k]:v}));
   const setPartes = (updater) => setF(x=>({...x, partes: typeof updater==="function" ? updater(x.partes||[]) : updater}));
   const ativarModoMultiplo = () => {
@@ -1798,10 +1784,66 @@ function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classific
     }
     setModoMultiplo(true);
   };
+
+  // Lê um PDF/.txt anexado e usa IA para extrair os dados do processo, preenchendo
+  // o formulário diretamente (a advogada revisa e ajusta antes de salvar).
+  const analisarDocumentoProcesso = async (e) => {
+    const arquivo = e.target.files?.[0];
+    if(!arquivo) return;
+    setErroDoc(""); setAnalisandoDoc(true);
+    try {
+      const ehPdf = arquivo.type === "application/pdf" || arquivo.name.toLowerCase().endsWith(".pdf");
+      const ehTexto = arquivo.type.startsWith("text/") || arquivo.name.toLowerCase().endsWith(".txt");
+      if(!ehPdf && !ehTexto) throw new Error("Só .pdf ou .txt são lidos automaticamente. Para Word, copie e cole os dados manualmente.");
+      const texto = ehPdf ? await extrairTextoPDF(arquivo) : await arquivo.text();
+      if(!texto) throw new Error("Não foi possível extrair texto deste documento — provavelmente é um PDF escaneado (imagem).");
+
+      const res = await fetch(IA_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_KEY },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          system: `Você extrai dados de um processo judicial a partir do texto de um documento (petição, intimação, decisão, etc.). Retorne SOMENTE um JSON válido, sem markdown:
+{"numero":"", "autor":"", "reu":"", "vara":"", "assunto":"", "valorCausa":""}
+Use string vazia em qualquer campo que não puder ser determinado com segurança. "valorCausa" deve ser só o número, sem formatação (ex: "5000.00"). Nunca invente dados que não estejam explicitamente no texto.`,
+          messages: [{role:"user", content: texto}]
+        })
+      });
+      if(!res.ok) throw new Error(`Erro HTTP ${res.status} ao chamar a IA.`);
+      const data = await res.json();
+      const txt = data.content?.find(b=>b.type==="text")?.text || "";
+      if(!txt) throw new Error("A IA retornou uma resposta vazia.");
+      const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
+      setF(x=>({
+        ...x,
+        numero: parsed.numero || x.numero,
+        autor: parsed.autor || x.autor,
+        reu: parsed.reu || x.reu,
+        vara: parsed.vara || x.vara,
+        assunto: parsed.assunto || x.assunto,
+        valorCausa: parsed.valorCausa || x.valorCausa,
+        sistema: x.sistema || (parsed.numero ? detectarSistemaProcessual(parsed.numero) : x.sistema),
+      }));
+    } catch(err) {
+      setErroDoc(err.message || "Não foi possível analisar o documento.");
+    }
+    setAnalisandoDoc(false);
+  };
+
   return (
     <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#fff",width:540,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
         <p style={{fontSize:15,fontWeight:700,margin:"0 0 18px",color:"var(--navy)"}}>{processo?"Editar processo":"Novo processo"}</p>
+        {!processo && (
+          <div style={{border:"1px dashed var(--border2)",borderRadius:7,padding:"10px 12px",marginBottom:16,background:"var(--bg2)"}}>
+            <label style={{fontSize:11.5,fontWeight:600,color:"var(--text1)",display:"block",marginBottom:6}}>✨ Preencher com IA a partir de um documento (opcional)</label>
+            <input type="file" accept=".pdf,application/pdf,.txt,text/plain" onChange={analisarDocumentoProcesso} disabled={analisandoDoc} style={{fontSize:12}}/>
+            {analisandoDoc && <span style={{fontSize:11,color:"var(--accent)",marginLeft:8}}>Analisando…</span>}
+            {erroDoc && <p style={{fontSize:11,color:"var(--red)",margin:"6px 0 0"}}>{erroDoc}</p>}
+            <p style={{fontSize:10,color:"var(--text3)",margin:"6px 0 0"}}>Lê uma petição, intimação ou decisão (PDF ou .txt) e já preenche número, partes, vara e assunto abaixo — revise antes de salvar.</p>
+          </div>
+        )}
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
             <div><span style={lbl}>Número do processo</span><input value={f.numero||""} onChange={e=>{
@@ -2425,6 +2467,32 @@ function CaixaEntradaIA({processos, clientes, setProcessos, setClientes, setTare
   const [erro, setErro] = useState("");
   const [proposta, setProposta] = useState(null);
   const [analisandoPrazoDe, setAnalisandoPrazoDe] = useState(null);
+  const [lendoArquivo, setLendoArquivo] = useState(false);
+  const [erroArquivo, setErroArquivo] = useState("");
+
+  const anexarArquivo = async (e) => {
+    const arquivo = e.target.files?.[0];
+    if(!arquivo) return;
+    setErroArquivo("");
+    const ehPdf = arquivo.type === "application/pdf" || arquivo.name.toLowerCase().endsWith(".pdf");
+    const ehTexto = arquivo.type.startsWith("text/") || arquivo.name.toLowerCase().endsWith(".txt");
+    if(ehPdf){
+      setLendoArquivo(true);
+      try {
+        const extraido = await extrairTextoPDF(arquivo);
+        if(!extraido) setErroArquivo("Não foi possível extrair texto deste PDF — provavelmente é um documento escaneado (imagem). Cole o conteúdo manualmente se tiver outra fonte.");
+        else setTexto(t => t ? t+"\n\n--- documento anexado ---\n"+extraido : extraido);
+      } catch(err){
+        setErroArquivo("Erro ao ler o PDF: " + (err.message||"arquivo pode estar corrompido."));
+      }
+      setLendoArquivo(false);
+      return;
+    }
+    if(!ehTexto){ setErroArquivo("Só .pdf ou .txt são lidos automaticamente. Para Word, copie e cole o conteúdo no campo acima."); return; }
+    const reader = new FileReader();
+    reader.onload = () => setTexto(t => t ? t+"\n\n--- documento anexado ---\n"+reader.result : String(reader.result));
+    reader.readAsText(arquivo);
+  };
 
   const interpretar = async () => {
     if(!texto.trim()){ setErro("Cole ou digite alguma informação antes de processar."); return; }
@@ -2576,6 +2644,12 @@ IMPORTANTE — prazo: se o texto contiver uma determinação que gera prazo/prov
         placeholder="Cole aqui o texto…"
         style={{width:"100%",minHeight:90,fontSize:12.5,padding:"10px 12px",borderRadius:7,border:"1px solid var(--border2)",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}
       />
+      <div style={{marginTop:8}}>
+        <label style={{fontSize:11,color:"var(--text2)",display:"block",marginBottom:4}}>Ou anexe um documento (PDF/.txt) para a IA extrair as informações:</label>
+        <input type="file" accept=".pdf,application/pdf,.txt,text/plain" onChange={anexarArquivo} disabled={lendoArquivo} style={{fontSize:12}}/>
+        {lendoArquivo && <span style={{fontSize:11,color:"var(--accent)",marginLeft:8}}>Lendo arquivo…</span>}
+      </div>
+      {erroArquivo && <p style={{fontSize:11.5,color:"var(--red)",marginTop:6}}>{erroArquivo}</p>}
       {erro && <div style={{marginTop:8,padding:"10px 12px",background:"var(--red-bg)",border:"1px solid #FCA5A5",borderRadius:6,fontSize:12,color:"var(--red)",lineHeight:1.5}}><strong>Erro:</strong> {erro}</div>}
       <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
         <button onClick={interpretar} disabled={processando} style={{...btnPri,opacity:processando?.7:1,fontSize:12.5,padding:"8px 18px"}}>
@@ -3882,6 +3956,9 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
   const [novo,setNovo]=useState(false);
   const [selecionado,setSelecionado]=useState(null);
   const [qualifCopiada,setQualifCopiada]=useState(null);
+  const [gerandoDoc,setGerandoDoc]=useState(null); // 'procuracao' | null
+  const [erroDoc,setErroDoc]=useState("");
+  const [abrindoContrato,setAbrindoContrato]=useState(false);
 
   React.useEffect(()=>{
     if(clienteParaAbrir){ setNovo(true); onClienteAberto(); }
@@ -3912,28 +3989,23 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
     excluirNoSupabase("clientes", c.id);
   };
 
-  const montarQualificacao = (c) => {
-    const partes = [];
-    partes.push(c.nome ? c.nome.toUpperCase() : "[NOME]");
-    if(c.nacionalidade) partes.push(c.nacionalidade.toLowerCase());
-    if(c.estadoCivil) partes.push(c.estadoCivil.toLowerCase());
-    if(c.profissao) partes.push(c.profissao.toLowerCase());
-    let texto = partes.join(", ");
-    const docs = [];
-    if(c.rg) docs.push(`portador(a) da cédula de identidade RG nº ${c.rg}`);
-    if(c.cpf) docs.push(`inscrito(a) no CPF sob o nº ${c.cpf}`);
-    if(docs.length) texto += ", " + docs.join(", ");
-    if(c.endereco) texto += `, residente e domiciliado(a) em ${c.endereco}`;
-    if(c.email) texto += `, e-mail: ${c.email}`;
-    texto += ".";
-    return texto;
-  };
+  const montarQualificacao = montarQualificacaoCliente;
 
   const copiarQualificacao = (c) => {
     const txt = montarQualificacao(c);
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(txt).then(()=>{setQualifCopiada(c.id);setTimeout(()=>setQualifCopiada(null), 2500);}).catch(()=>{});
     }
+  };
+
+  const gerarProcuracao = async (c) => {
+    setErroDoc(""); setGerandoDoc("procuracao");
+    try {
+      await gerarProcuracaoParaCliente(c);
+    } catch(e) {
+      setErroDoc(e.message || "Não foi possível gerar a procuração.");
+    }
+    setGerandoDoc(null);
   };
 
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
@@ -4023,6 +4095,11 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
               </div>
               <div style={{background:"var(--bg2)",borderRadius:6,padding:"10px 12px",fontSize:12,color:"var(--text1)",lineHeight:1.6,fontStyle:"italic"}}>{montarQualificacao(selecionado)}</div>
               <p style={{fontSize:10,color:"var(--text3)",margin:"6px 0 0"}}>Dados faltantes (RG, estado civil, profissão, etc.) podem ser preenchidos em "Editar cliente".</p>
+              <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
+                <button onClick={()=>gerarProcuracao(selecionado)} disabled={gerandoDoc==="procuracao"} style={{...btnSec,fontSize:11,padding:"6px 12px",opacity:gerandoDoc==="procuracao"?.6:1}}>{gerandoDoc==="procuracao"?"Gerando…":"📄 Gerar procuração (Word)"}</button>
+                <button onClick={()=>setAbrindoContrato(true)} style={{...btnSec,fontSize:11,padding:"6px 12px"}}>📄 Gerar contrato de honorários</button>
+              </div>
+              {erroDoc && <p style={{fontSize:11,color:"var(--red)",marginTop:8}}>{erroDoc}</p>}
             </div>
             <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
               <button onClick={()=>excluirCliente(selecionado)} style={{...btnSec,color:"var(--red)",borderColor:"#F3B8B8",marginRight:"auto"}}>🗑 Excluir cliente</button>
@@ -4032,6 +4109,7 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
           </div>
         </div>
       )}
+      {abrindoContrato&&selecionado&&<ModalGerarContrato cliente={selecionado} onClose={()=>setAbrindoContrato(false)}/>}
     </div>
   );
 }
@@ -5026,6 +5104,173 @@ async function extrairTextoPDFDeBase64(base64){
     textoCompleto += conteudo.items.map(item => item.str).join(" ") + "\n\n";
   }
   return textoCompleto.trim();
+}
+
+// Monta a qualificação completa de um cliente a partir dos dados já salvos no cadastro
+// (nome, nacionalidade, estado civil, profissão, RG, CPF, endereço, e-mail) — usada tanto
+// na tela de Clientes quanto na geração de procuração e contrato.
+function montarQualificacaoCliente(c){
+  const partes = [];
+  partes.push(c.nome ? c.nome.toUpperCase() : "[NOME]");
+  if(c.nacionalidade) partes.push(c.nacionalidade.toLowerCase());
+  if(c.estadoCivil) partes.push(c.estadoCivil.toLowerCase());
+  if(c.profissao) partes.push(c.profissao.toLowerCase());
+  let texto = partes.join(", ");
+  const docs = [];
+  if(c.rg) docs.push(`portador(a) da cédula de identidade RG nº ${c.rg}`);
+  if(c.cpf) docs.push(`inscrito(a) no CPF sob o nº ${c.cpf}`);
+  if(docs.length) texto += ", " + docs.join(", ");
+  if(c.endereco) texto += `, residente e domiciliado(a) em ${c.endereco}`;
+  if(c.email) texto += `, e-mail: ${c.email}`;
+  texto += ".";
+  return texto;
+}
+
+const nomeArquivoSeguro = (nome) => (nome||"documento").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"_").slice(0,50);
+
+// Gera a procuração em Word (com timbrado) usando o texto padrão real da advogada,
+// preenchido com os dados já salvos no cadastro do cliente. "finalidadeEspecifica" é
+// opcional (ex: "propor Inventário Judicial ou Extrajudicial") — se não informada, a
+// procuração sai só com os poderes gerais.
+async function gerarProcuracaoParaCliente(cliente, finalidadeEspecifica){
+  const qualificacao = montarQualificacaoCliente(cliente);
+  const finalidade = (finalidadeEspecifica && finalidadeEspecifica.trim())
+    ? ` em especial ${finalidadeEspecifica.trim()},`
+    : "";
+  const conteudo = [
+    "#TITULO#Procuração",
+    `Por este instrumento particular de mandato, ${qualificacao} nomeia e constitui sua bastante procuradora a advogada MICHELLI COSTA DE ABREU MARINHO, inscrita na OAB/RJ sob o nº 155.134, e GUSTAVO MARINHO MACHADO, inscrito na OAB/RJ sob o nº 141.149, com escritório na Rua Doutor Pereira dos Santos, nº 107, Sala 701, Centro, Itaboraí/RJ, CEP 24800-041, aos quais confere e outorga plenos poderes para defender os interesses da(o) Outorgante, com todos os poderes para o foro geral compreendidos na cláusula *ad judicia et extra*,${finalidade} podendo para tanto apresentar petições, recursos e defesas, requerer certidões e assinar o que necessário for, conciliar, desistir, renunciar, transigir, receber e dar quitação, podendo inclusive substabelecer, com ou sem reserva, os poderes que lhes são conferidos e, finalmente, praticar todos os demais atos necessários ao fiel cumprimento deste mandato.`,
+    `#CENTRO#Itaboraí, ${hoje.toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}.`,
+    `#ASSINATURA_CENTRO#${(cliente.nome||"").toUpperCase()}`,
+  ].join("\n");
+  await gerarDocumentoTimbrado("Procuracao_"+nomeArquivoSeguro(cliente.nome), conteudo);
+}
+
+// Gera o contrato de honorários advocatícios em Word (com timbrado), usando os dados já
+// salvos no cadastro do cliente e as informações específicas deste contrato (objeto,
+// honorários, forma de pagamento) informadas na hora.
+async function gerarContratoParaCliente(cliente, dadosContrato){
+  const qualificacao = montarQualificacaoCliente(cliente);
+  const { itensObjeto, valorTotal, adiantamento, parcelamento, percentualExito, baseCalculoExito, foro } = dadosContrato;
+  const temExito = percentualExito && percentualExito.trim();
+  const foroFinal = (foro && foro.trim()) || "Itaboraí/RJ";
+  const contadorPedido = {n:0};
+
+  const linhas = [
+    "#TITULO#Contrato de Honorários Advocatícios",
+    `CONTRATANTE: ${qualificacao}`,
+    `CONTRATADO: MICHELLI COSTA DE ABREU, brasileira, casada, advogada, inscrita na OAB/RJ sob o nº 155.134, com escritório profissional localizado na Rua Dr. Pereira dos Santos, 54, sala 701, Centro, na cidade de Itaboraí/RJ.`,
+    "#SECAO#Cláusula 1. Do Objeto do Contrato",
+    `1.1 - O presente contrato tem por objeto a prestação de serviços advocatícios pela CONTRATADA ao CONTRATANTE, consistindo na representação legal do CONTRATANTE, conforme procurações e documentos que acompanham este instrumento, consistindo em:`,
+    ...itensObjeto.map(item => `#ITEM#${item}`),
+    `1.2 - A CONTRATADA se obriga a praticar todos os atos processuais necessários à defesa dos interesses do CONTRATANTE, incluindo a elaboração de petições, comparecimento a audiências, interposição de recursos e acompanhamento integral das demandas até o trânsito em julgado das decisões.`,
+    "#SECAO#Cláusula 2. Prazo de Vigência",
+    `2.1 - Este contrato permanecerá vigente até o encerramento definitivo de todos os processos objeto deste instrumento, incluindo eventuais recursos e cumprimento de sentença.`,
+    `2.2 - Considera-se encerramento definitivo o trânsito em julgado da decisão final ou a impossibilidade de interposição de novos recursos.`,
+    "#SECAO#Cláusula 3. Honorários Contratuais",
+    `3.1 - Pelos serviços ora contratados, o CONTRATANTE pagará à CONTRATADA o valor total de ${valorTotal}, da seguinte forma:`,
+  ];
+  if(adiantamento && adiantamento.trim()) linhas.push(`#PEDIDO#${adiantamento.trim()}, pagos a título de adiantamento;`);
+  linhas.push(`#PEDIDO#o saldo remanescente será pago ${parcelamento};`);
+  if(temExito) linhas.push(`#PEDIDO#além dos honorários contratuais ajustados, o CONTRATANTE pagará à CONTRATADA honorários de êxito equivalentes a ${percentualExito.trim()} sobre o benefício econômico obtido na demanda, devidos no momento em que houver obtenção de resultado favorável definitivo, ainda que parcial, inclusive em caso de acordo ou solução administrativa.`);
+  linhas.push(`3.2 - Os pagamentos deverão ser realizados via PIX ou transferência para conta de titularidade da CONTRATADA.`);
+  linhas.push(`3.3 - O inadimplemento implicará multa de 10% (dez por cento) sobre o valor em atraso, acrescido de juros de 1% (um por cento) ao mês e correção monetária.`);
+  if(temExito && baseCalculoExito && baseCalculoExito.trim()){
+    linhas.push(`3.4 - Para fins de apuração do êxito, convencionam as partes que o valor discutido fica desde já fixado em ${baseCalculoExito.trim()}, servindo como base de cálculo para a aferição do proveito econômico.`);
+  }
+  linhas.push(`3.5 - Eventuais honorários de sucumbência que vierem a ser arbitrados em favor da parte CONTRATANTE pertencerão exclusivamente à CONTRATADA, nos termos do art. 23 da Lei nº 8.906/94 (Estatuto da Advocacia).`);
+  linhas.push("#SECAO#Cláusula 4. Obrigações do Contratante");
+  linhas.push(`4.1 - O CONTRATANTE se compromete a fornecer tempestivamente todos os documentos e informações necessárias à condução das ações, manter atualizados seus dados de contato e informar imediatamente à CONTRATADA qualquer fato novo relevante aos processos.`);
+  linhas.push("#SECAO#Cláusula 5. Informação e Comunicação");
+  linhas.push(`5.1 - A CONTRATADA manterá o CONTRATANTE informado sobre o andamento das demandas por meio eletrônico (e-mail, WhatsApp ou outro meio acordado), conforme o art. 9º do Código de Ética e Disciplina da OAB. Eventuais consultas e atendimentos fora do horário comercial serão cobrados como horas extraordinárias.`);
+  linhas.push(`5.2 - O CONTRATANTE se declara ciente que a CONTRATADA não entra em contato por meio de qualquer outro número de telefone ou WhatsApp além do contato (21) 97115-5632.`);
+  linhas.push(`5.3 - A CONTRATADA JAMAIS SOLICITARÁ PAGAMENTOS EM CONTAS DE TERCEIROS, supostos funcionários, peritos ou servidores do Judiciário, devendo quaisquer despesas serem pagas exclusivamente através de depósito na conta de titularidade da CONTRATADA, ou por meio de Documento de Arrecadação (DARF/GRU), enviados sempre somente pela CONTRATADA.`);
+  linhas.push(`5.4 - O CONTRATANTE se compromete a desconsiderar qualquer solicitação de pagamento recebida via telefone, e-mail ou aplicativos de mensagem que não corresponda aos dados bancários acima, confirmando a autenticidade de eventuais solicitações diretamente com a CONTRATADA através do número oficial (21) 97115-5632, e ao receber qualquer contato sobre a causa deve primeiro reportar à CONTRATADA antes de realizar qualquer ato.`);
+  linhas.push("#SECAO#Cláusula 6. Desistência ou Rescisão");
+  linhas.push(`6.1 - Em caso de desistência das ações ou dispensa dos serviços antes do término dos processos por parte do CONTRATANTE, a CONTRATADA fará jus aos honorários avençados nos presentes termos. Igualmente, em caso de impossibilidade de cumprimento do presente contrato por parte da CONTRATADA, o CONTRATANTE será restituído dos valores pagos, na proporção dos serviços realizados.`);
+  linhas.push(`6.2 - Caso, após a revogação, o CONTRATANTE venha a obter, por qualquer meio, resultado favorável relacionado ao objeto deste contrato, ainda que por atuação de outro profissional, serão devidos os honorários de êxito à CONTRATADA, quando demonstrado que o resultado decorre, ainda que parcialmente, do trabalho por ela anteriormente realizado.`);
+  linhas.push("#SECAO#Cláusula 7. Foro");
+  linhas.push(`7.1 - Fica eleito o foro da comarca de ${foroFinal} para dirimir quaisquer controvérsias decorrentes deste contrato, com renúncia expressa a qualquer outro, por mais privilegiado que seja.`);
+  linhas.push("#SECAO#Cláusula 8. Da Obrigação das Partes e Sucessores");
+  linhas.push(`8.1 - O presente contrato obriga as partes, bem como seus herdeiros e sucessores a qualquer título, ao fiel cumprimento de todas as suas cláusulas e condições.`);
+  linhas.push(`8.2 - Em caso de falecimento do CONTRATANTE, os honorários contratados, inclusive os de êxito e eventuais valores em aberto, serão exigíveis em face do espólio, na forma da legislação vigente, até sua integral quitação.`);
+  linhas.push("#SECAO#Cláusula 9. Disposições Gerais");
+  linhas.push(`9.1 - Este contrato constitui o acordo integral entre as partes e só poderá ser alterado por escrito e mediante assinatura de ambas as partes, e a nulidade de qualquer cláusula não afetará as demais, que permanecerão em pleno vigor.`);
+  linhas.push(`Este contrato é regido pelas leis da República Federativa do Brasil, especialmente pela Lei nº 8.906/94 (Estatuto da Advocacia) e pelo Código Civil.`);
+  linhas.push(`#CENTRO#Itaboraí, ${hoje.toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}.`);
+  linhas.push(`#CENTRO#____________________________________`);
+  linhas.push(`#ASSINATURA_CENTRO#${(cliente.nome||"").toUpperCase()}`);
+  linhas.push(`#CENTRO#____________________________________`);
+  linhas.push(`#ASSINATURA_CENTRO#MICHELLI COSTA DE ABREU`);
+  linhas.push(`#ASSINATURA_CENTRO#OAB/RJ 155.134`);
+  linhas.push(`#CENTRO#____________________________________`);
+  linhas.push(`#CENTRO#TESTEMUNHA 1 – Nome / CPF`);
+  linhas.push(`#CENTRO#____________________________________`);
+  linhas.push(`#CENTRO#TESTEMUNHA 2 – Nome / CPF`);
+
+  await gerarDocumentoTimbrado("Contrato_"+nomeArquivoSeguro(cliente.nome), linhas.join("\n"));
+}
+
+// Formulário para coletar os dados específicos do contrato (objeto, honorários, forma de
+// pagamento e, se houver, percentual de êxito) antes de gerar o documento no timbrado.
+function ModalGerarContrato({cliente, onClose}){
+  const [objeto, setObjeto] = useState(""); // uma linha por item
+  const [valorTotal, setValorTotal] = useState("");
+  const [adiantamento, setAdiantamento] = useState("");
+  const [parcelamento, setParcelamento] = useState("");
+  const [percentualExito, setPercentualExito] = useState("");
+  const [baseCalculoExito, setBaseCalculoExito] = useState("");
+  const [foro, setForo] = useState("Itaboraí/RJ");
+  const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const gerar = async () => {
+    const itensObjeto = objeto.split("\n").map(l=>l.trim()).filter(Boolean);
+    if(!itensObjeto.length || !valorTotal.trim() || !parcelamento.trim()){
+      setErro("Preencha ao menos o objeto, o valor total dos honorários e a forma de pagamento do saldo.");
+      return;
+    }
+    setErro(""); setGerando(true);
+    try {
+      await gerarContratoParaCliente(cliente, {
+        itensObjeto, valorTotal: valorTotal.trim(), adiantamento: adiantamento.trim(),
+        parcelamento: parcelamento.trim(), percentualExito: percentualExito.trim(),
+        baseCalculoExito: baseCalculoExito.trim(), foro: foro.trim(),
+      });
+      onClose();
+    } catch(e) {
+      setErro(e.message || "Não foi possível gerar o contrato.");
+    }
+    setGerando(false);
+  };
+
+  return (
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#fff",width:560,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",borderRadius:10,padding:"1.5rem",boxShadow:"0 20px 50px rgba(0,0,0,.25)"}}>
+        <p style={{fontSize:10,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".7px",margin:"0 0 4px",fontWeight:600}}>Contrato de honorários</p>
+        <p style={{fontSize:15,fontWeight:700,margin:"0 0 14px",color:"var(--navy)"}}>{cliente.nome}</p>
+        <p style={{fontSize:11.5,color:"var(--text2)",margin:"0 0 14px",lineHeight:1.5}}>
+          Segue o modelo padrão do escritório (9 cláusulas). A qualificação completa já vem do cadastro — preencha só o que muda de contrato pra contrato:
+        </p>
+        <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}>
+          <div><span style={lbl}>Objeto — um item por linha</span><textarea value={objeto} onChange={e=>setObjeto(e.target.value)} style={{...inp,minHeight:70,resize:"vertical"}} placeholder={"Ex:\npropositura de ação de cobrança referente a...\natuação em eventual defesa em embargos ou impugnação\nadoção de medidas administrativas pertinentes"}/></div>
+          <div><span style={lbl}>Valor total dos honorários</span><input value={valorTotal} onChange={e=>setValorTotal(e.target.value)} style={inp} placeholder="Ex: R$ 9.000,00 (nove mil reais)"/></div>
+          <div><span style={lbl}>Adiantamento já pago <span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span></span><input value={adiantamento} onChange={e=>setAdiantamento(e.target.value)} style={inp} placeholder="Ex: R$ 1.000,00 (mil reais)"/></div>
+          <div><span style={lbl}>Forma de pagamento do saldo</span><textarea value={parcelamento} onChange={e=>setParcelamento(e.target.value)} style={{...inp,minHeight:50,resize:"vertical"}} placeholder="Ex: em 3 (três) parcelas mensais, iguais e sucessivas, com vencimento todo dia 17 de cada mês"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><span style={lbl}>Percentual de êxito <span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span></span><input value={percentualExito} onChange={e=>setPercentualExito(e.target.value)} style={inp} placeholder="Ex: 20% (vinte por cento)"/></div>
+            <div><span style={lbl}>Base de cálculo do êxito <span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span></span><input value={baseCalculoExito} onChange={e=>setBaseCalculoExito(e.target.value)} style={inp} placeholder="Ex: R$ 500.000,00"/></div>
+          </div>
+          <div><span style={lbl}>Foro</span><input value={foro} onChange={e=>setForo(e.target.value)} style={inp}/></div>
+        </div>
+        {erro && <p style={{fontSize:12,color:"var(--red)",marginBottom:12}}>{erro}</p>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={btnSec}>Cancelar</button>
+          <button onClick={gerar} disabled={gerando} style={{...btnPri,opacity:gerando?.7:1}}>{gerando?"Gerando…":"📄 Gerar contrato (Word)"}</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ModalExecutarTarefaIA({tarefa, processo, cliente, onClose, onConcluir}){
@@ -6105,6 +6350,20 @@ function montarParagrafoPeca(linhaOriginal, contadorPedido){
   if(linhaOriginal.startsWith("#ASSINATURA#")){
     const texto = linhaOriginal.replace("#ASSINATURA#","").trim();
     return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Cambria" w:hAnsi="Cambria" w:cs="Cambria"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${escaparXml(texto)}</w:t></w:r></w:p>`;
+  }
+  // Usadas na procuração (fechamento centralizado, igual ao modelo real da advogada).
+  if(linhaOriginal.startsWith("#ASSINATURA_CENTRO#")){
+    const texto = linhaOriginal.replace("#ASSINATURA_CENTRO#","").trim();
+    return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Cambria" w:hAnsi="Cambria" w:cs="Cambria"/><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${escaparXml(texto)}</w:t></w:r></w:p>`;
+  }
+  if(linhaOriginal.startsWith("#CENTRO#")){
+    const texto = linhaOriginal.replace("#CENTRO#","").trim();
+    return `<w:p><w:pPr><w:spacing w:after="240" w:line="300" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>${montarRunsComItalico(texto)}</w:p>`;
+  }
+  // Item de lista com marcador "-", sem letra (usado nos objetos de contrato).
+  if(linhaOriginal.startsWith("#ITEM#")){
+    const texto = linhaOriginal.replace("#ITEM#","").trim();
+    return `<w:p><w:pPr><w:spacing w:after="120" w:line="300" w:lineRule="auto"/><w:ind w:left="700" w:hanging="350"/><w:jc w:val="both"/></w:pPr>${montarRunsComItalico("- "+texto)}</w:p>`;
   }
   return `<w:p><w:pPr><w:spacing w:after="240" w:line="300" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr>${montarRunsComItalico(linhaOriginal)}</w:p>`;
 }
