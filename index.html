@@ -1511,6 +1511,276 @@ function resolverClientesDasPartes(partes, clientesAtuais, setClientes){
   if(clientesNovos.length && setClientes) setClientes(cs=>[...cs, ...clientesNovos]);
   return partesResolvidas;
 }
+// ── Ficha de Atendimento: cadastro de caso novo (sem número de processo ainda) ──
+// Faz a triagem de um caso novo: cria o cliente e o processo (mesmo sem número),
+// já com tarefas iniciais, lê documentos anexados para preencher o cadastro via IA,
+// e gera a procuração pronta no timbrado.
+function ModalFichaAtendimento({clientes, setClientes, setProcessos, setTarefas, classificacoesCustom, onClose, onConcluido, leadOrigem, onLeadProcessado}){
+  const [nomeCliente, setNomeCliente] = useState(leadOrigem?.nome || "");
+  const [tipoAcao, setTipoAcao] = useState("");
+  const [descricaoCaso, setDescricaoCaso] = useState(leadOrigem?.descricao || "");
+  const [textoDocumentos, setTextoDocumentos] = useState("");
+  const [lendoArquivo, setLendoArquivo] = useState(false);
+  const [analisando, setAnalisando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [extraido, setExtraido] = useState(null); // preview da IA antes de aplicar
+  const [criado, setCriado] = useState(null); // {processo, cliente} após criar
+  const [gerandoProcuracao, setGerandoProcuracao] = useState(false);
+  const [erroProcuracao, setErroProcuracao] = useState("");
+
+  // Se veio de um atendimento preenchido pelo site, já lê o documento anexado (se houver).
+  React.useEffect(()=>{
+    if(leadOrigem?.documento_base64){
+      extrairTextoPDFDeBase64(leadOrigem.documento_base64)
+        .then(texto=>{ if(texto) setTextoDocumentos(texto); })
+        .catch(()=>{ /* falha silenciosa — a advogada ainda pode preencher manualmente */ });
+    }
+  }, [leadOrigem]);
+
+  const lerArquivo = async (e) => {
+    const arquivo = e.target.files?.[0];
+    if(!arquivo) return;
+    setErro("");
+    const ehPdf = arquivo.type === "application/pdf" || arquivo.name.toLowerCase().endsWith(".pdf");
+    const ehTexto = arquivo.type.startsWith("text/") || arquivo.name.toLowerCase().endsWith(".txt");
+    if(ehPdf){
+      setLendoArquivo(true);
+      try {
+        const texto = await extrairTextoPDF(arquivo);
+        if(!texto) setErro("Não foi possível extrair texto deste PDF — provavelmente é um documento escaneado (imagem). Cole o conteúdo manualmente se tiver outra fonte.");
+        else setTextoDocumentos(t => t ? t+"\n\n--- novo documento ---\n"+texto : texto);
+      } catch(err){
+        setErro("Erro ao ler o PDF: " + (err.message||"arquivo pode estar corrompido."));
+      }
+      setLendoArquivo(false);
+      return;
+    }
+    if(!ehTexto){ setErro("Só .pdf ou .txt são lidos automaticamente. Para Word, copie e cole o conteúdo no campo abaixo."); return; }
+    const reader = new FileReader();
+    reader.onload = () => setTextoDocumentos(t => t ? t+"\n\n--- novo documento ---\n"+reader.result : String(reader.result));
+    reader.readAsText(arquivo);
+  };
+
+  const analisarComIA = async () => {
+    setErro(""); setAnalisando(true); setExtraido(null);
+    try {
+      const contexto = [
+        nomeCliente ? `Nome informado do cliente: ${nomeCliente}` : "",
+        tipoAcao ? `Tipo de ação informado: ${CC[tipoAcao]?.label || tipoAcao}` : "",
+        descricaoCaso ? `Descrição do caso (fatos relatados pela advogada): ${descricaoCaso}` : "",
+        textoDocumentos ? `\n=== TEXTO DOS DOCUMENTOS ANEXADOS ===\n${textoDocumentos}\n=== FIM DOS DOCUMENTOS ===` : "",
+      ].filter(Boolean).join("\n");
+      if(!contexto.trim()){ throw new Error("Preencha ao menos o nome do cliente, a descrição do caso ou anexe um documento."); }
+
+      let res;
+      try {
+        res = await fetch(IA_PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_KEY },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 1800,
+            system: `Você ajuda uma advogada brasileira a fazer a triagem de um caso novo (ficha de atendimento). Com base no contexto fornecido (nome informado, descrição do caso e/ou texto de documentos anexados, como RG, CPF, comprovante de residência, contrato), extraia os dados cadastrais do cliente e um resumo dos fatos.
+
+Retorne SOMENTE um JSON válido, sem markdown, no formato:
+{"nome":"...", "cpf":"...", "rg":"...", "endereco":"...", "estadoCivil":"...", "profissao":"...", "nacionalidade":"...", "telefone":"...", "email":"...", "resumoFatos":"..."}
+
+Use string vazia "" em qualquer campo que não puder ser determinado com segurança pelo contexto — nunca invente CPF, RG, endereço ou qualquer outro dado que não esteja explicitamente no contexto. "resumoFatos" deve ter 2 a 4 frases narrando os fatos relevantes do caso, com base na descrição e/ou documentos fornecidos.`,
+            messages: [{role:"user", content: contexto}]
+          })
+        });
+      } catch(e) { throw new Error("Não foi possível conectar ao serviço de IA — verifique sua conexão."); }
+      if(!res.ok){
+        let detalhe = ""; try { const b = await res.json(); detalhe = b?.error?.message||""; } catch(_){}
+        throw new Error(`Erro HTTP ${res.status} ao chamar a IA.${detalhe?` ${detalhe}`:""}`);
+      }
+      const data = await res.json();
+      const txt = data.content?.find(b=>b.type==="text")?.text || "";
+      if(!txt) throw new Error("A IA retornou uma resposta vazia.");
+      let parsed;
+      try { parsed = JSON.parse(txt.replace(/```json|```/g,"").trim()); }
+      catch(e){ throw new Error(`Resposta da IA não veio em JSON válido. Início: "${txt.slice(0,150)}"`); }
+      setExtraido({ ...parsed, nome: parsed.nome || nomeCliente });
+    } catch(e) {
+      setErro(e.message || "Não foi possível analisar os dados.");
+    }
+    setAnalisando(false);
+  };
+
+  const confirmarCriacao = () => {
+    const dados = extraido || { nome: nomeCliente, resumoFatos: descricaoCaso };
+    if(!dados.nome || !dados.nome.trim()){ setErro("Informe ao menos o nome do cliente."); return; }
+
+    // Reaproveita cliente já cadastrado com o mesmo nome, ou cria um novo.
+    const nomeNorm = dados.nome.trim().toLowerCase();
+    let clienteId, clienteObj;
+    const existente = clientes.find(c=>c.nome.trim().toLowerCase()===nomeNorm);
+    if(existente){
+      clienteId = existente.id;
+      clienteObj = {
+        ...existente,
+        cpf: existente.cpf || dados.cpf || "",
+        rg: existente.rg || dados.rg || "",
+        endereco: existente.endereco || dados.endereco || "",
+        estadoCivil: existente.estadoCivil || dados.estadoCivil || "",
+        profissao: existente.profissao || dados.profissao || "",
+        nacionalidade: existente.nacionalidade || dados.nacionalidade || "",
+        telefone: existente.telefone || dados.telefone || leadOrigem?.telefone || "",
+        email: existente.email || dados.email || leadOrigem?.email || "",
+      };
+      setClientes(cs=>cs.map(c=>c.id===clienteId?clienteObj:c));
+    } else {
+      clienteId = Date.now();
+      clienteObj = {
+        id: clienteId, nome: dados.nome.trim(), cpf: dados.cpf||"", rg: dados.rg||"",
+        endereco: dados.endereco||"", estadoCivil: dados.estadoCivil||"", profissao: dados.profissao||"",
+        nacionalidade: dados.nacionalidade||"brasileiro(a)", telefone: dados.telefone||leadOrigem?.telefone||"", email: dados.email||leadOrigem?.email||"",
+        obs: leadOrigem ? "Criado via atendimento preenchido pelo site." : "Criado via Ficha de Atendimento.",
+      };
+      setClientes(cs=>[...cs, clienteObj]);
+    }
+
+    // Cria o processo mesmo sem número — ele fica marcado para distribuição futura.
+    const processoId = Date.now()+7;
+    const novoProcesso = {
+      id: processoId, clienteId, numero: "", tipo: "judicial", classificacao: tipoAcao || "",
+      autor: dados.nome.trim(), reu: "", vara: "", responsavel: "", status: "em_andamento",
+      prazo: "", prazoAto: "Elaborar e distribuir petição inicial", debito: null,
+      assunto: "Caso novo — aguardando distribuição", valorCausa: "",
+      andamentos: [{ data: hoje.toISOString().slice(0,10), desc: leadOrigem ? "Atendimento recebido pelo site institucional." : "Ficha de atendimento registrada.", fonte: "manual" }],
+      documentos: [], checklist: {}, docChecklist: [],
+      obs: dados.resumoFatos || descricaoCaso || "",
+    };
+    setProcessos(ps=>[...ps, novoProcesso]);
+
+    // Tarefas iniciais do caso novo. Quando o caso vem de um atendimento preenchido
+    // pelo site, adiciona também a tarefa de responder ao cliente com proposta e procuração.
+    if(setTarefas){
+      const baseId = Date.now();
+      const tarefasIniciais = [
+        { id: baseId+1, titulo: "Reunir documentos do cliente", responsavelId:"", procId:processoId, clienteId, status:"pendente", prioridade:"media", prazo:"", desc:"", arquivada:false },
+        { id: baseId+2, titulo: "Elaborar procuração", responsavelId:"", procId:processoId, clienteId, status:"pendente", prioridade:"alta", prazo:"", desc:"", arquivada:false },
+        { id: baseId+3, titulo: "Elaborar petição inicial", responsavelId:"", procId:processoId, clienteId, status:"pendente", prioridade:"alta", prazo:"", desc: dados.resumoFatos||"", arquivada:false },
+      ];
+      if(leadOrigem){
+        tarefasIniciais.unshift({
+          id: baseId, titulo: "Responder cliente com proposta de honorários e procuração para assinatura",
+          responsavelId:"", procId:processoId, clienteId, status:"pendente", prioridade:"alta", prazo:"",
+          desc: `Contato: ${leadOrigem.telefone||"—"}${leadOrigem.email?` · ${leadOrigem.email}`:""}`, arquivada:false,
+        });
+      }
+      setTarefas(ts=>[...ts, ...tarefasIniciais]);
+    }
+
+    setCriado({ processo: novoProcesso, cliente: clienteObj });
+    if(leadOrigem && onLeadProcessado) onLeadProcessado(leadOrigem.id);
+  };
+
+  const gerarProcuracao = async () => {
+    if(!criado) return;
+    setErroProcuracao(""); setGerandoProcuracao(true);
+    try {
+      const c = criado.cliente;
+      const qualificacao = [c.nome?.toUpperCase(), c.nacionalidade, c.estadoCivil, c.profissao].filter(Boolean).join(", ")
+        + (c.rg?`, portador(a) da cédula de identidade RG nº ${c.rg}`:"")
+        + (c.cpf?`, inscrito(a) no CPF sob o nº ${c.cpf}`:"")
+        + (c.endereco?`, residente e domiciliado(a) em ${c.endereco}`:"") + ".";
+      const conteudo = [
+        "#TITULO#Procuração",
+        `Pelo presente instrumento particular de mandato, ${qualificacao}, na qualidade de OUTORGANTE, nomeia e constitui sua bastante procuradora`,
+        "#ASSINATURA#MICHELLI COSTA DE ABREU",
+        "#ASSINATURA#OAB/RJ 155.134",
+        `à qual confere amplos poderes para o foro em geral, podendo propor contra quem de direito as ações competentes e defendê-la nas contrárias, seguindo umas e outras até final decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda poderes especiais para confessar, desistir, transigir, firmar compromissos ou acordos, receber e dar quitação, agir em conjunto ou separadamente, substabelecer esta a outrem, com ou sem reservas de iguais poderes, dar e receber citação, tudo em direito permitido, relativamente à causa em que a(o) OUTORGANTE figura como parte interessada.`,
+        `Itaboraí, ${hoje.toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}.`,
+        `#ASSINATURA#${(c.nome||"").toUpperCase()}`,
+        "#ASSINATURA#OUTORGANTE",
+      ].join("\n");
+      const nomeArquivo = "Procuracao_"+(c.nome||"cliente").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"_").slice(0,50);
+      await gerarDocumentoTimbrado(nomeArquivo, conteudo);
+    } catch(e) {
+      setErroProcuracao(e.message || "Não foi possível gerar a procuração.");
+    }
+    setGerandoProcuracao(false);
+  };
+
+  return (
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.45)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#fff",width:600,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+          <div>
+            <p style={{fontSize:10,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".7px",margin:"0 0 4px",fontWeight:600}}>Ficha de Atendimento</p>
+            <p style={{fontSize:15,fontWeight:700,margin:0,color:"var(--navy)"}}>Novo caso</p>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:0,lineHeight:1}}>×</button>
+        </div>
+
+        {!criado ? (
+          <>
+            <p style={{fontSize:11.5,color:"var(--text2)",margin:"0 0 14px",lineHeight:1.5}}>
+              Cria o processo mesmo sem número (fica marcado para distribuição futura), já com tarefas iniciais. Anexe documentos para a IA ajudar a preencher o cadastro.
+            </p>
+            <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:14}}>
+              <div><span style={lbl}>Nome do cliente</span><input value={nomeCliente} onChange={e=>setNomeCliente(e.target.value)} style={inp} placeholder="Nome completo"/></div>
+              <div>
+                <span style={lbl}>Tipo de ação</span>
+                <select value={tipoAcao} onChange={e=>setTipoAcao(e.target.value)} style={{...inp,padding:"7px 8px"}}>
+                  <option value="">Selecione…</option>
+                  {CLASSIFICACOES_VALIDAS.map(k=><option key={k} value={k}>{CC[k].label}</option>)}
+                  {(classificacoesCustom||[]).map(k=><option key={k} value={k}>{k}</option>)}
+                </select>
+              </div>
+              <div><span style={lbl}>Descrição do caso</span><textarea value={descricaoCaso} onChange={e=>setDescricaoCaso(e.target.value)} style={{...inp,minHeight:80,resize:"vertical"}} placeholder="Conte brevemente o que aconteceu, o que o cliente precisa…"/></div>
+              <div>
+                <span style={lbl}>Anexar documento(s) — opcional</span>
+                <input type="file" accept=".pdf,application/pdf,.txt,text/plain" onChange={lerArquivo} disabled={lendoArquivo} style={{fontSize:12,marginBottom:6}}/>
+                {lendoArquivo && <p style={{fontSize:11,color:"var(--accent)",margin:"0 0 6px"}}>Lendo arquivo…</p>}
+                {textoDocumentos && <p style={{fontSize:10.5,color:"var(--green)",margin:"0 0 6px"}}>✓ Conteúdo de documento(s) anexado ({textoDocumentos.length} caracteres)</p>}
+              </div>
+            </div>
+            {erro && <p style={{fontSize:12,color:"var(--red)",marginBottom:12}}>{erro}</p>}
+
+            {extraido && (
+              <div style={{background:"var(--accent-light)",border:"1px solid #E4CDC5",borderRadius:7,padding:"12px 14px",marginBottom:14}}>
+                <p style={{fontSize:11,fontWeight:700,color:"var(--navy2)",margin:"0 0 8px",textTransform:"uppercase",letterSpacing:".4px"}}>✨ Dados identificados pela IA — revise antes de criar</p>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  {[["Nome","nome"],["CPF","cpf"],["RG","rg"],["Telefone","telefone"],["E-mail","email"],["Estado civil","estadoCivil"],["Profissão","profissao"],["Nacionalidade","nacionalidade"]].map(([label,campo])=>(
+                    <div key={campo}>
+                      <span style={{...lbl,fontSize:9.5}}>{label}</span>
+                      <input value={extraido[campo]||""} onChange={e=>setExtraido(x=>({...x,[campo]:e.target.value}))} style={{...inp,fontSize:11.5,padding:"5px 8px"}}/>
+                    </div>
+                  ))}
+                </div>
+                <span style={{...lbl,fontSize:9.5}}>Endereço</span>
+                <input value={extraido.endereco||""} onChange={e=>setExtraido(x=>({...x,endereco:e.target.value}))} style={{...inp,fontSize:11.5,padding:"5px 8px",marginBottom:8}}/>
+                <span style={{...lbl,fontSize:9.5}}>Resumo dos fatos</span>
+                <textarea value={extraido.resumoFatos||""} onChange={e=>setExtraido(x=>({...x,resumoFatos:e.target.value}))} style={{...inp,fontSize:11.5,minHeight:60,resize:"vertical"}}/>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+              <button onClick={onClose} style={btnSec}>Cancelar</button>
+              {!extraido && <button onClick={analisarComIA} disabled={analisando} style={{...btnSec,opacity:analisando?.6:1}}>{analisando?"Analisando…":"✨ Analisar com IA"}</button>}
+              <button onClick={confirmarCriacao} style={btnPri}>Criar caso</button>
+            </div>
+          </>
+        ) : (
+          <div>
+            <div style={{background:"var(--green-bg)",border:"1px solid #A8DDB8",borderRadius:7,padding:"12px 14px",marginBottom:16,fontSize:12.5,color:"var(--green)"}}>
+              ✓ Caso criado — cliente <strong>{criado.cliente.nome}</strong> e processo registrados, com 3 tarefas iniciais em "Prazos e Tarefas".
+            </div>
+            {erroProcuracao && <p style={{fontSize:11.5,color:"var(--red)",marginBottom:10}}>{erroProcuracao}</p>}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <button onClick={gerarProcuracao} disabled={gerandoProcuracao} style={{...btnPri,opacity:gerandoProcuracao?.7:1}}>{gerandoProcuracao?"Gerando…":"📄 Gerar procuração (Word, com timbrado)"}</button>
+              <button onClick={()=>onConcluido(criado.processo, criado.cliente, true)} style={btnSec}>✨ Esboçar petição inicial com IA</button>
+              <button onClick={()=>onConcluido(criado.processo, criado.cliente, false)} style={btnSec}>Abrir o processo</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ModalFormProc({processo,clientes,onSave,onClose,onNovoCliente,classificacoesCustom,onNovaClassificacao}){
   const e0={numero:"",tipo:"judicial",clienteId:"",autor:"",reu:"",vara:"",responsavel:"",status:"ativo",prazo:"",andamentos:[],documentos:[],partes:[]};
   const [f,setF]=useState(()=>processo||e0);
@@ -2366,8 +2636,11 @@ IMPORTANTE — prazo: se o texto contiver uma determinação que gera prazo/prov
     </div>
   );
 }
-function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, agenda, equipe, intimacoes, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido}){
+function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, agenda, equipe, intimacoes, onAbrirProcesso, onIrPara, setProcessos, setClientes, onVerPrazoRapido, leadsAtendimento, onLeadProcessado, onDescartarLead, classificacoesCustom}){
   const [mostrarUrgentes, setMostrarUrgentes] = useState(false);
+  const [mostrarAtendimentos, setMostrarAtendimentos] = useState(false);
+  const [processandoLead, setProcessandoLead] = useState(null);
+  const [executandoAposFicha, setExecutandoAposFicha] = useState(null);
   const tarefasPendentes = (tarefas||[]).filter(t=>t.status!=="concluido");
   const tarefasAtrasadas = tarefasPendentes.filter(t=>t.prazo&&diasRest(t.prazo)<0);
   const hojeStr = hoje.toISOString().slice(0,10);
@@ -2455,6 +2728,7 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, ag
   );
 
   return (
+    <>
     <div>
       <div style={{marginBottom:18}}>
         <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Visão geral</h1>
@@ -2467,12 +2741,19 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, ag
         const naoLidasDjen = (intimacoes||[]).filter(i=>!i.lida).length;
         if(naoLidasDjen===0) return null;
         return (
-          <div onClick={()=>onIrPara("intimacoes")} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--accent-light)",border:"1px solid #E4CDC5",borderRadius:8,padding:"10px 16px",marginBottom:16,cursor:"pointer"}}>
+          <div onClick={()=>onIrPara("intimacoes")} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--accent-light)",border:"1px solid #E4CDC5",borderRadius:8,padding:"10px 16px",marginBottom:12,cursor:"pointer"}}>
             <span style={{fontSize:12.5,color:"var(--navy2)"}}><strong>{naoLidasDjen}</strong> publicação(ões) nova(s) no DJEN aguardando leitura</span>
             <span style={{fontSize:12,fontWeight:600,color:"var(--accent)"}}>Ver intimações →</span>
           </div>
         );
       })()}
+
+      {(leadsAtendimento||[]).length>0 && (
+        <div onClick={()=>setMostrarAtendimentos(true)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--green-bg)",border:"1px solid #A8DDB8",borderRadius:8,padding:"10px 16px",marginBottom:16,cursor:"pointer"}}>
+          <span style={{fontSize:12.5,color:"var(--green)"}}><strong>{leadsAtendimento.length}</strong> novo(s) atendimento(s) recebido(s) pelo site</span>
+          <span style={{fontSize:12,fontWeight:600,color:"var(--green)"}}>Ver atendimentos →</span>
+        </div>
+      )}
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
         <AlertCard
@@ -2721,6 +3002,64 @@ function PaginaDashboard({processos, parcelas, clientes, tarefas, setTarefas, ag
         );
       })()}
     </div>
+
+    {mostrarAtendimentos && (
+      <div onClick={e=>e.target===e.currentTarget&&setMostrarAtendimentos(false)} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.45)",zIndex:350,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+        <div style={{background:"#fff",width:640,maxWidth:"100%",maxHeight:"85vh",overflow:"auto",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <p style={{fontSize:15,fontWeight:700,margin:0,color:"var(--navy)"}}>Atendimentos recebidos pelo site</p>
+            <button onClick={()=>setMostrarAtendimentos(false)} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:0,lineHeight:1}}>×</button>
+          </div>
+          {(leadsAtendimento||[]).length===0 ? (
+            <p style={{fontSize:13,color:"var(--text2)"}}>Nenhum atendimento pendente.</p>
+          ) : leadsAtendimento.map(lead=>(
+            <div key={lead.id} style={{border:"1px solid var(--border1)",borderRadius:8,padding:"14px 16px",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:6}}>
+                <div>
+                  <p style={{fontSize:13.5,fontWeight:700,margin:"0 0 2px",color:"var(--text1)"}}>{lead.nome}</p>
+                  <p style={{fontSize:11.5,color:"var(--text2)",margin:0}}>{lead.telefone}{lead.email?` · ${lead.email}`:""}{lead.tipo_caso?` · ${lead.tipo_caso}`:""}</p>
+                </div>
+                {lead.documento_nome && <Pill bg="var(--accent-light)" color="var(--accent)" label="📎 anexo" sm/>}
+              </div>
+              <p style={{fontSize:12.5,color:"var(--text1)",margin:"0 0 10px",lineHeight:1.5}}>{lead.descricao}</p>
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                <button onClick={()=>onDescartarLead(lead.id)} style={{...btnSec,fontSize:11,padding:"5px 12px",color:"var(--red)"}}>Descartar</button>
+                <button onClick={()=>{setProcessandoLead(lead);setMostrarAtendimentos(false);}} style={{...btnPri,fontSize:11,padding:"5px 12px"}}>Processar caso</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {processandoLead && (
+      <ModalFichaAtendimento
+        clientes={clientes} setClientes={setClientes} setProcessos={setProcessos} setTarefas={setTarefas}
+        classificacoesCustom={classificacoesCustom}
+        leadOrigem={processandoLead}
+        onLeadProcessado={onLeadProcessado}
+        onClose={()=>setProcessandoLead(null)}
+        onConcluido={(processo,cliente,esbocarInicial)=>{
+          setProcessandoLead(null);
+          if(esbocarInicial){
+            setExecutandoAposFicha({
+              tarefa: {id:"temp-"+processo.id, titulo:"Elaborar petição inicial", status:"pendente", prazo:"", desc:processo.obs||""},
+              processo, cliente,
+            });
+          } else {
+            onAbrirProcesso(processo);
+          }
+        }}
+      />
+    )}
+    {executandoAposFicha && (
+      <ModalExecutarTarefaIA
+        tarefa={executandoAposFicha.tarefa} processo={executandoAposFicha.processo} cliente={executandoAposFicha.cliente}
+        onClose={()=>setExecutandoAposFicha(null)}
+        onConcluir={()=>setExecutandoAposFicha(null)}
+      />
+    )}
+    </>
   );
 }
 function ModalAcaoLote({tipo, qtd, clientes, classificacoes, onAplicar, onClose}){
@@ -2785,6 +3124,8 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
   const [modoSelecao,setModoSelecao]=useState(false);
   const [acaoLote,setAcaoLote]=useState(null);
   const [filtroKpi,setFiltroKpi]=useState(null); // 'vencidos' | 'proximos' | 'aguardando' | 'andamento' | null
+  const [abrindoFicha,setAbrindoFicha]=useState(false);
+  const [executandoAposFicha,setExecutandoAposFicha]=useState(null);
   const [menuAbertoId,setMenuAbertoId]=useState(null);
   const [atribuindoRespId,setAtribuindoRespId]=useState(null);
   const [respForm,setRespForm]=useState("");
@@ -3235,6 +3576,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
           <button onClick={()=>{ if(modoSelecao) limparSelecao(); else setModoSelecao(true); }} style={{...btnSec,display:"flex",alignItems:"center",gap:7,fontWeight:600,borderColor:modoSelecao?"var(--accent)":"var(--border2)",color:modoSelecao?"var(--accent)":"var(--text1)"}}>
             <Icon name="checkSquare" size={14}/>{modoSelecao?"Cancelar":"Selecionar"}
           </button>
+          <button onClick={()=>setAbrindoFicha(true)} style={{...btnSec,display:"flex",alignItems:"center",gap:7}}>Ficha de Atendimento</button>
           <button onClick={()=>setNovo(true)} style={{...btnPri,display:"flex",alignItems:"center",gap:7}}><Icon name="plus" size={14} color="#fff"/>Novo processo</button>
         </div>
       </div>
@@ -3510,6 +3852,27 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
         </div>
       )}
       {colandoMovPara&&<ModalColarMovimentacoes proc={colandoMovPara} onConfirm={confirmarMovColadas} onClose={()=>setColandoMovPara(null)}/>}
+      {abrindoFicha&&<ModalFichaAtendimento
+        clientes={clientes} setClientes={setClientes} setProcessos={setProcessos} setTarefas={setTarefas}
+        classificacoesCustom={classificacoesCustom}
+        onClose={()=>setAbrindoFicha(false)}
+        onConcluido={(processo,cliente,esbocarInicial)=>{
+          setAbrindoFicha(false);
+          if(esbocarInicial){
+            setExecutandoAposFicha({
+              tarefa: {id:"temp-"+processo.id, titulo:"Elaborar petição inicial", status:"pendente", prazo:"", desc:processo.obs||""},
+              processo, cliente,
+            });
+          } else {
+            setSelected(processo);
+          }
+        }}
+      />}
+      {executandoAposFicha&&<ModalExecutarTarefaIA
+        tarefa={executandoAposFicha.tarefa} processo={executandoAposFicha.processo} cliente={executandoAposFicha.cliente}
+        onClose={()=>setExecutandoAposFicha(null)}
+        onConcluir={()=>setExecutandoAposFicha(null)}
+      />}
     </div>
   );
 }
@@ -4221,16 +4584,76 @@ async function buscarPublicacoesDJEN({oabNumero, oabUf, dias, intimacoesAtuais, 
   return novas;
 }
 
-function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, equipe, setTarefas, onAbrirProcesso, configDjen}){
+function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, clientes, setClientes, equipe, setTarefas, onAbrirProcesso, configDjen}){
   const [filtro,setFiltro] = useState("novas");
   const [criandoPrazoPara, setCriandoPrazoPara] = useState(null);
   const [criandoTarefaPara, setCriandoTarefaPara] = useState(null);
+  const [cadastrandoDe, setCadastrandoDe] = useState(null);
+  const [analisandoCadastro, setAnalisandoCadastro] = useState(false);
+  const [erroCadastro, setErroCadastro] = useState("");
+  const [dadosCadastro, setDadosCadastro] = useState(null);
   const [oabNumero, setOabNumero] = useState(configDjen?.oabNumero || "155134");
   const [oabUf, setOabUf] = useState(configDjen?.oabUf || "RJ");
   const [buscandoDjen, setBuscandoDjen] = useState(false);
   const [erroDjen, setErroDjen] = useState("");
   const [resultadoDjen, setResultadoDjen] = useState("");
   const [diasBusca, setDiasBusca] = useState(15);
+
+  // Analisa o texto da publicação com IA para extrair os dados do processo e sugerir
+  // qual das partes é representada por este escritório (comparando com o nome/OAB da advogada).
+  const analisarPublicacaoParaCadastro = async (intimacao) => {
+    setErroCadastro(""); setAnalisandoCadastro(true); setDadosCadastro(null);
+    try {
+      let res;
+      try {
+        res = await fetch(IA_PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_KEY },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 1200,
+            system: `Você extrai dados estruturados de processo a partir do texto de uma publicação/intimação do Diário de Justiça. Retorne SOMENTE um JSON válido, sem markdown:
+{"numero":"", "autor":"", "reu":"", "vara":"", "assunto":"", "parteClienteEhAutor": true ou false ou null}
+
+Use string vazia quando não identificar o dado com segurança. "parteClienteEhAutor": marque true se o texto indicar que a advogada MICHELLI COSTA DE ABREU (OAB/RJ 155134, podendo aparecer como "OAB RJ155134" ou variações) representa o AUTOR; false se representa o RÉU; null se não for possível determinar. Nunca invente número de processo, nomes ou vara que não estejam explicitamente no texto.`,
+            messages: [{role:"user", content: intimacao.texto || intimacao.teor || ""}]
+          })
+        });
+      } catch(e) { throw new Error("Não foi possível conectar ao serviço de IA."); }
+      if(!res.ok) throw new Error(`Erro HTTP ${res.status} ao chamar a IA.`);
+      const data = await res.json();
+      const txt = data.content?.find(b=>b.type==="text")?.text || "";
+      if(!txt) throw new Error("A IA retornou uma resposta vazia.");
+      const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
+      setDadosCadastro(parsed);
+    } catch(e) {
+      setErroCadastro(e.message || "Não foi possível analisar a publicação.");
+    }
+    setAnalisandoCadastro(false);
+  };
+
+  const confirmarCadastroDePublicacao = () => {
+    if(!dadosCadastro || !cadastrandoDe) return;
+    const partes = [];
+    if(dadosCadastro.autor) partes.push({id:uid(), nome:dadosCadastro.autor, polo:"autor", clienteId: dadosCadastro.parteClienteEhAutor===true ? true : null});
+    if(dadosCadastro.reu) partes.push({id:uid(), nome:dadosCadastro.reu, polo:"reu", clienteId: dadosCadastro.parteClienteEhAutor===false ? true : null});
+    const partesResolvidas = resolverClientesDasPartes(partes, clientes, setClientes);
+    const parteCliente = partesResolvidas.find(x=>x.clienteId && x.clienteId!==true);
+
+    const novoId = Date.now();
+    const novoProcesso = {
+      id: novoId, clienteId: parteCliente?parteCliente.clienteId:"", numero: dadosCadastro.numero||"", tipo:"judicial",
+      classificacao:"", autor: dadosCadastro.autor||"", reu: dadosCadastro.reu||"", vara: dadosCadastro.vara||"",
+      responsavel:"", status:"em_andamento", prazo:"", debito:null, assunto: dadosCadastro.assunto||"", valorCausa:"",
+      partes: partesResolvidas,
+      andamentos: [{ data: (cadastrandoDe.dataDisponibilizacao||"").slice(0,10) || hoje.toISOString().slice(0,10), desc: cadastrandoDe.texto||"", fonte:"cnj" }],
+      documentos: [], checklist: {}, obs: "Criado a partir de publicação localizada no DJEN.",
+    };
+    setProcessos(ps=>[...ps, novoProcesso]);
+    setIntimacoes(is=>is.map(i=>i.id===cadastrandoDe.id?{...i, procId:novoId, lida:true}:i));
+    setCadastrandoDe(null); setDadosCadastro(null);
+    onAbrirProcesso(novoProcesso);
+  };
 
   const buscarDJEN = async () => {
     setErroDjen(""); setResultadoDjen(""); setBuscandoDjen(true);
@@ -4373,6 +4796,7 @@ function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, e
                     {processos.map(p=><option key={p.id} value={p.id}>{p.numero}</option>)}
                   </select>
                   {proc&&<button onClick={()=>onAbrirProcesso(proc)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Ver processo</button>}
+                  {!i.procId&&<button onClick={()=>{setCadastrandoDe(i);setDadosCadastro(null);setErroCadastro("");analisarPublicacaoParaCadastro(i);}} style={{...btnSec,fontSize:10.5,padding:"5px 10px",color:"var(--accent)",borderColor:"var(--accent)"}}>✨ Cadastrar processo</button>}
                   <button onClick={()=>setCriandoPrazoPara(i)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>⏱ Criar prazo</button>
                   <button onClick={()=>setCriandoTarefaPara(i)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>✓ Criar tarefa</button>
                   {!i.lida&&<button onClick={()=>marcarLida(i.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Marcar como lida</button>}
@@ -4385,6 +4809,44 @@ function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, e
       )}
       {criandoPrazoPara&&<ModalCriarPrazoIntimacao intimacao={criandoPrazoPara} onConfirm={confirmarPrazo} onClose={()=>setCriandoPrazoPara(null)}/>}
       {criandoTarefaPara&&<ModalCriarTarefaIntimacao intimacao={criandoTarefaPara} equipe={equipe||[]} onConfirm={confirmarTarefa} onClose={()=>setCriandoTarefaPara(null)}/>}
+      {cadastrandoDe&&(
+        <div onClick={e=>e.target===e.currentTarget&&setCadastrandoDe(null)} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+          <div style={{background:"#fff",width:480,maxWidth:"100%",borderRadius:10,padding:"1.5rem",boxShadow:"0 20px 50px rgba(0,0,0,.25)"}}>
+            <p style={{fontSize:10,color:"var(--text2)",textTransform:"uppercase",letterSpacing:".7px",margin:"0 0 14px",fontWeight:600}}>✨ Cadastrar processo a partir da publicação</p>
+            {analisandoCadastro && <p style={{fontSize:12.5,color:"var(--text2)"}}>Analisando publicação…</p>}
+            {erroCadastro && <p style={{fontSize:12,color:"var(--red)",marginBottom:12}}>{erroCadastro}</p>}
+            {dadosCadastro && (
+              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+                <div><span style={lbl}>Número do processo</span><input value={dadosCadastro.numero||""} onChange={e=>setDadosCadastro(d=>({...d,numero:e.target.value}))} style={inp}/></div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div>
+                    <span style={lbl}>Autor</span>
+                    <input value={dadosCadastro.autor||""} onChange={e=>setDadosCadastro(d=>({...d,autor:e.target.value}))} style={inp}/>
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:dadosCadastro.parteClienteEhAutor===true?"var(--accent)":"var(--text2)",marginTop:4,cursor:"pointer"}}>
+                      <input type="checkbox" checked={dadosCadastro.parteClienteEhAutor===true} onChange={e=>setDadosCadastro(d=>({...d,parteClienteEhAutor:e.target.checked?true:null}))} style={{width:13,height:13}}/>
+                      É o cliente
+                    </label>
+                  </div>
+                  <div>
+                    <span style={lbl}>Réu</span>
+                    <input value={dadosCadastro.reu||""} onChange={e=>setDadosCadastro(d=>({...d,reu:e.target.value}))} style={inp}/>
+                    <label style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:dadosCadastro.parteClienteEhAutor===false?"var(--accent)":"var(--text2)",marginTop:4,cursor:"pointer"}}>
+                      <input type="checkbox" checked={dadosCadastro.parteClienteEhAutor===false} onChange={e=>setDadosCadastro(d=>({...d,parteClienteEhAutor:e.target.checked?false:null}))} style={{width:13,height:13}}/>
+                      É o cliente
+                    </label>
+                  </div>
+                </div>
+                <div><span style={lbl}>Vara</span><input value={dadosCadastro.vara||""} onChange={e=>setDadosCadastro(d=>({...d,vara:e.target.value}))} style={inp}/></div>
+                <div><span style={lbl}>Assunto</span><input value={dadosCadastro.assunto||""} onChange={e=>setDadosCadastro(d=>({...d,assunto:e.target.value}))} style={inp}/></div>
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={()=>setCadastrandoDe(null)} style={btnSec}>Cancelar</button>
+              {dadosCadastro && <button onClick={confirmarCadastroDePublicacao} style={btnPri}>+ Criar processo</button>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4533,6 +4995,39 @@ function ModalPrazoRapido({tarefa, processo, cliente, clientesTodos, onClose, on
   );
 }
 
+// Extrai o texto de um PDF (quando o PDF tem texto selecionável, não é apenas imagem
+// escaneada) usando o PDF.js direto no navegador — compartilhada entre os recursos de IA.
+async function extrairTextoPDF(arquivo){
+  if(typeof pdfjsLib === "undefined") throw new Error("A biblioteca de leitura de PDF ainda não carregou — aguarde alguns segundos e tente de novo.");
+  const buffer = await arquivo.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let textoCompleto = "";
+  for(let i = 1; i <= pdf.numPages; i++){
+    const pagina = await pdf.getPage(i);
+    const conteudo = await pagina.getTextContent();
+    const textoPagina = conteudo.items.map(item => item.str).join(" ");
+    textoCompleto += textoPagina + "\n\n";
+  }
+  return textoCompleto.trim();
+}
+
+// Mesma extração, mas a partir de um PDF já em base64 (caso dos documentos enviados
+// pelo formulário público de atendimento, que chegam como texto no banco de dados).
+async function extrairTextoPDFDeBase64(base64){
+  if(typeof pdfjsLib === "undefined") throw new Error("A biblioteca de leitura de PDF ainda não carregou — aguarde alguns segundos e tente de novo.");
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for(let i=0;i<binario.length;i++) bytes[i] = binario.charCodeAt(i);
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  let textoCompleto = "";
+  for(let i = 1; i <= pdf.numPages; i++){
+    const pagina = await pdf.getPage(i);
+    const conteudo = await pagina.getTextContent();
+    textoCompleto += conteudo.items.map(item => item.str).join(" ") + "\n\n";
+  }
+  return textoCompleto.trim();
+}
+
 function ModalExecutarTarefaIA({tarefa, processo, cliente, onClose, onConcluir}){
   const [textoAnexado, setTextoAnexado] = useState("");
   const [instrucoes, setInstrucoes] = useState("");
@@ -4542,20 +5037,6 @@ function ModalExecutarTarefaIA({tarefa, processo, cliente, onClose, onConcluir})
   const [erroDocx, setErroDocx] = useState("");
   const [erro, setErro] = useState("");
   const [resultado, setResultado] = useState("");
-
-  const extrairTextoPDF = async (arquivo) => {
-    if(typeof pdfjsLib === "undefined") throw new Error("A biblioteca de leitura de PDF ainda não carregou — aguarde alguns segundos e tente de novo.");
-    const buffer = await arquivo.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-    let textoCompleto = "";
-    for(let i = 1; i <= pdf.numPages; i++){
-      const pagina = await pdf.getPage(i);
-      const conteudo = await pagina.getTextContent();
-      const textoPagina = conteudo.items.map(item => item.str).join(" ");
-      textoCompleto += textoPagina + "\n\n";
-    }
-    return textoCompleto.trim();
-  };
 
   const lerArquivo = async (e) => {
     const arquivo = e.target.files?.[0];
@@ -5697,6 +6178,19 @@ function AppPrincipal({user}){
   const [agenda, setAgenda] = useState([]);
   const [equipe, setEquipe] = useState([]);
   const [intimacoes, setIntimacoes] = useState([]);
+  const [leadsAtendimento, setLeadsAtendimento] = useState([]);
+  const marcarLeadProcessado = async (id) => {
+    setLeadsAtendimento(ls=>ls.filter(l=>l.id!==id));
+    if(sb){
+      try { await sb.from("leads_atendimento").update({status:"processado"}).eq("id", id); }
+      catch(e){ console.error("Erro ao marcar atendimento como processado:", e); }
+    }
+  };
+  const descartarLead = (id) => {
+    if(!confirm("Descartar este atendimento? Esta ação não pode ser desfeita.")) return;
+    setLeadsAtendimento(ls=>ls.filter(l=>l.id!==id));
+    excluirNoSupabase("leads_atendimento", id);
+  };
   const [oabNumeroConfig, setOabNumeroConfig] = useState(()=>{
     try { return localStorage.getItem("djen_oabNumero") || "155134"; } catch(e){ return "155134"; }
   });
@@ -5855,7 +6349,7 @@ function AppPrincipal({user}){
     (async () => {
       if(!sb){ setErroCarregamento(sbErroInicial||"Sem conexão com o banco."); setCarregandoDados(false); return; }
       try {
-        const tabelas = ["processos","clientes","parcelas","despesas","tarefas","agenda","equipe","intimacoes"];
+        const tabelas = ["processos","clientes","parcelas","despesas","tarefas","agenda","equipe","intimacoes","leads_atendimento"];
         // Cada tabela é carregada de forma independente: se uma tabela ainda não existir no
         // Supabase (ex: "intimacoes" não criada), o sistema não trava inteiro — só aquela
         // parte fica vazia, e um aviso aparece no rodapé da barra lateral.
@@ -5872,7 +6366,7 @@ function AppPrincipal({user}){
         const tabelasFaltando = resultados.filter(r=>r._tabelaFaltando).map(r=>r._tabelaFaltando);
         if(tabelasFaltando.length) setAvisoTabelasFaltando(tabelasFaltando);
         if(!ativo) return;
-        const [rProc, rCli, rParc, rDesp, rTar, rAg, rEq, rInt] = resultados;
+        const [rProc, rCli, rParc, rDesp, rTar, rAg, rEq, rInt, rLeads] = resultados;
         const parseCampo = (v, fallback) => { if(v===undefined||v===null) return fallback; if(typeof v==="string"){ try { return JSON.parse(v); } catch(_) { return fallback; } } return v; };
         // Importante: NUNCA cair de volta para os dados de teste (PROCS0/CLIENTES0/FINANC0/EQUIPE0)
         // quando a tabela estiver vazia — isso fazia os dados de teste "reaparecerem" toda vez
@@ -5899,6 +6393,7 @@ function AppPrincipal({user}){
         setAgenda(rAg.data||[]);
         setEquipe(rEq.data||[]);
         setIntimacoes(rInt.data||[]);
+        setLeadsAtendimento((rLeads.data||[]).filter(l=>l.status!=="processado"));
       } catch(e) {
         setErroCarregamento(e.message || "Erro ao carregar dados.");
       }
@@ -6038,14 +6533,14 @@ function AppPrincipal({user}){
         </div>
       </div>
       <div style={{flex:1,overflow:"auto",padding:"24px 32px"}}>
-        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} setTarefas={setTarefas} agenda={agenda} equipe={equipe} intimacoes={intimacoes} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido}/>}
+        {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} setTarefas={setTarefas} agenda={agenda} equipe={equipe} intimacoes={intimacoes} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido} leadsAtendimento={leadsAtendimento} onLeadProcessado={marcarLeadProcessado} onDescartarLead={descartarLead} classificacoesCustom={classificacoesCustom}/>}
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom} usuarioAtual={user?.email||"desconhecido"}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos}/>}
         {pagina==="relatorios" && <PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
-        {pagina==="intimacoes" && <PaginaIntimacoes intimacoes={intimacoes} setIntimacoes={setIntimacoes} processos={processos} setProcessos={setProcessos} equipe={equipe} setTarefas={setTarefas} onAbrirProcesso={abrirProcesso} configDjen={{oabNumero:oabNumeroConfig, oabUf:oabUfConfig, salvarConfig:salvarConfigDjen}}/>}
+        {pagina==="intimacoes" && <PaginaIntimacoes intimacoes={intimacoes} setIntimacoes={setIntimacoes} processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} equipe={equipe} setTarefas={setTarefas} onAbrirProcesso={abrirProcesso} configDjen={{oabNumero:oabNumeroConfig, oabUf:oabUfConfig, salvarConfig:salvarConfigDjen}}/>}
         {pagina==="importacao" && <PaginaImportacao processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes}/>}
         {pagina==="equipe" && <PaginaEquipe equipe={equipe} setEquipe={setEquipe}/>}
       </div>
@@ -6096,4 +6591,3 @@ root.render(<App/>);
 </script>
 </body>
 </html>
-  
