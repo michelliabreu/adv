@@ -3950,7 +3950,7 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     </div>
   );
 }
-function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clienteParaAbrir, onClienteAberto}){
+function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clienteParaAbrir, onClienteAberto, documentosCliente, onAdicionarDocumento, onExcluirDocumento}){
   const [busca,setBusca]=useState("");
   const [editando,setEditando]=useState(null);
   const [novo,setNovo]=useState(false);
@@ -3959,6 +3959,12 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
   const [gerandoDoc,setGerandoDoc]=useState(null); // 'procuracao' | null
   const [erroDoc,setErroDoc]=useState("");
   const [abrindoContrato,setAbrindoContrato]=useState(false);
+  const [tipoNovoDoc,setTipoNovoDoc]=useState("RG");
+  const [enviandoDoc,setEnviandoDoc]=useState(false);
+  const [erroUploadDoc,setErroUploadDoc]=useState("");
+  const [extraindoDocId,setExtraindoDocId]=useState(null);
+  const [dadosExtraidos,setDadosExtraidos]=useState(null); // {docId, campos}
+  const [erroExtracao,setErroExtracao]=useState("");
 
   React.useEffect(()=>{
     if(clienteParaAbrir){ setNovo(true); onClienteAberto(); }
@@ -4006,6 +4012,91 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
       setErroDoc(e.message || "Não foi possível gerar a procuração.");
     }
     setGerandoDoc(null);
+  };
+
+  const TIPOS_DOCUMENTO_CLIENTE = ["RG","CPF","Comprovante de Residência","Procuração assinada","Contrato assinado","Outro"];
+
+  const anexarDocumentoCliente = async (e, clienteId) => {
+    const arquivo = e.target.files?.[0];
+    if(!arquivo) return;
+    setErroUploadDoc("");
+    if(arquivo.size > 8*1024*1024){ setErroUploadDoc("Arquivo muito grande (máx. 8MB)."); return; }
+    setEnviandoDoc(true);
+    try {
+      const base64 = await new Promise((resolve,reject)=>{
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(arquivo);
+      });
+      await onAdicionarDocumento(clienteId, {nome: arquivo.name, tipo: tipoNovoDoc, mimeType: arquivo.type, base64});
+    } catch(err){
+      setErroUploadDoc("Erro ao anexar o arquivo: " + (err.message||""));
+    }
+    setEnviandoDoc(false);
+    e.target.value = "";
+  };
+
+  const baixarDocumentoCliente = (doc) => {
+    const url = "data:"+(doc.mime_type||"application/octet-stream")+";base64,"+doc.arquivo_base64;
+    const a = document.createElement("a");
+    a.href = url; a.download = doc.nome || "documento";
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  // Envia o documento (imagem ou PDF) direto para a IA extrair os dados cadastrais —
+  // funciona até com foto de RG, já que usa a visão da IA, não apenas leitura de texto.
+  const extrairDadosDocumento = async (doc) => {
+    setErroExtracao(""); setExtraindoDocId(doc.id); setDadosExtraidos(null);
+    try {
+      const ehImagem = (doc.mime_type||"").startsWith("image/");
+      const ehPdf = doc.mime_type === "application/pdf";
+      if(!ehImagem && !ehPdf) throw new Error("Só é possível extrair dados de imagens (JPG/PNG) ou PDF.");
+      const blocoArquivo = ehImagem
+        ? { type:"image", source:{ type:"base64", media_type: doc.mime_type, data: doc.arquivo_base64 } }
+        : { type:"document", source:{ type:"base64", media_type:"application/pdf", data: doc.arquivo_base64 } };
+      const res = await fetch(IA_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_KEY },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 800,
+          system: `Você extrai dados cadastrais de um documento pessoal (RG, CPF, comprovante de residência, etc.) anexado como imagem ou PDF. Retorne SOMENTE um JSON válido, sem markdown:
+{"nome":"", "cpf":"", "rg":"", "endereco":"", "nacionalidade":"", "estadoCivil":"", "profissao":""}
+Use string vazia em qualquer campo que não aparecer claramente no documento. Nunca invente dados. Se o documento não for legível ou não tiver esses dados, retorne todos os campos vazios.`,
+          messages: [{role:"user", content: [blocoArquivo, {type:"text", text:"Extraia os dados cadastrais deste documento."}]}]
+        })
+      });
+      if(!res.ok) throw new Error(`Erro HTTP ${res.status} ao chamar a IA.`);
+      const data = await res.json();
+      const txt = data.content?.find(b=>b.type==="text")?.text || "";
+      if(!txt) throw new Error("A IA retornou uma resposta vazia.");
+      const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
+      const algumCampo = Object.values(parsed).some(v=>v && String(v).trim());
+      if(!algumCampo) throw new Error("Não foi possível identificar dados legíveis neste documento.");
+      setDadosExtraidos({docId: doc.id, campos: parsed});
+    } catch(e) {
+      setErroExtracao(e.message || "Não foi possível extrair dados do documento.");
+    }
+    setExtraindoDocId(null);
+  };
+
+  const aplicarDadosExtraidos = (clienteAtual) => {
+    if(!dadosExtraidos) return;
+    const c = dadosExtraidos.campos;
+    const atualizado = {
+      ...clienteAtual,
+      nome: clienteAtual.nome || c.nome || clienteAtual.nome,
+      cpf: clienteAtual.cpf || c.cpf || clienteAtual.cpf,
+      rg: clienteAtual.rg || c.rg || clienteAtual.rg,
+      endereco: clienteAtual.endereco || c.endereco || clienteAtual.endereco,
+      nacionalidade: clienteAtual.nacionalidade || c.nacionalidade || clienteAtual.nacionalidade,
+      estadoCivil: clienteAtual.estadoCivil || c.estadoCivil || clienteAtual.estadoCivil,
+      profissao: clienteAtual.profissao || c.profissao || clienteAtual.profissao,
+    };
+    setClientes(cs=>cs.map(x=>x.id===clienteAtual.id?atualizado:x));
+    setSelecionado(atualizado);
+    setDadosExtraidos(null);
   };
 
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
@@ -4100,6 +4191,52 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
                 <button onClick={()=>setAbrindoContrato(true)} style={{...btnSec,fontSize:11,padding:"6px 12px"}}>📄 Gerar contrato de honorários</button>
               </div>
               {erroDoc && <p style={{fontSize:11,color:"var(--red)",marginTop:8}}>{erroDoc}</p>}
+            </div>
+
+            <div style={{marginTop:16,borderTop:"1px solid var(--border1)",paddingTop:14}}>
+              <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",color:"var(--text2)",margin:"0 0 10px"}}>📎 Documentos pessoais</p>
+              {(documentosCliente||[]).filter(d=>d.clienteId===selecionado.id).length===0 ? (
+                <p style={{fontSize:12,color:"var(--text2)",marginBottom:10}}>Nenhum documento anexado ainda.</p>
+              ) : (
+                <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+                  {(documentosCliente||[]).filter(d=>d.clienteId===selecionado.id).map(doc=>(
+                    <div key={doc.id} style={{border:"1px solid var(--border1)",borderRadius:6,padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <div>
+                        <p style={{fontSize:12,fontWeight:600,margin:"0 0 1px"}}>{doc.tipo||"Documento"}</p>
+                        <p style={{fontSize:10.5,color:"var(--text2)",margin:0}}>{doc.nome}</p>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>extrairDadosDocumento(doc)} disabled={extraindoDocId===doc.id} style={{...btnSec,fontSize:10,padding:"4px 9px",opacity:extraindoDocId===doc.id?.6:1}}>{extraindoDocId===doc.id?"Lendo…":"✨ Extrair dados"}</button>
+                        <button onClick={()=>baixarDocumentoCliente(doc)} style={{...btnSec,fontSize:10,padding:"4px 9px"}}>Baixar</button>
+                        <button onClick={()=>onExcluirDocumento(doc.id)} style={{...btnSec,fontSize:10,padding:"4px 9px",color:"var(--red)"}}>Excluir</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {erroExtracao && <p style={{fontSize:11,color:"var(--red)",marginBottom:8}}>{erroExtracao}</p>}
+              {dadosExtraidos && (
+                <div style={{background:"var(--accent-light)",border:"1px solid #E4CDC5",borderRadius:6,padding:"10px 12px",marginBottom:12,fontSize:11.5}}>
+                  <p style={{fontWeight:700,margin:"0 0 6px",color:"var(--navy2)"}}>Dados encontrados no documento:</p>
+                  <ul style={{margin:"0 0 10px",paddingLeft:18}}>
+                    {Object.entries(dadosExtraidos.campos).filter(([,v])=>v).map(([k,v])=>(<li key={k}>{k}: {v}</li>))}
+                  </ul>
+                  <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                    <button onClick={()=>setDadosExtraidos(null)} style={{...btnSec,fontSize:10.5,padding:"4px 10px"}}>Descartar</button>
+                    <button onClick={()=>aplicarDadosExtraidos(selecionado)} style={{...btnPri,fontSize:10.5,padding:"4px 10px"}}>Aplicar ao cadastro</button>
+                  </div>
+                  <p style={{fontSize:9.5,color:"var(--text3)",margin:"6px 0 0"}}>Só preenche campos que ainda estão vazios no cadastro — não sobrescreve dados já preenchidos.</p>
+                </div>
+              )}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                <select value={tipoNovoDoc} onChange={e=>setTipoNovoDoc(e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11,width:"auto"}}>
+                  {TIPOS_DOCUMENTO_CLIENTE.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+                <input type="file" accept="image/*,.pdf,application/pdf" onChange={e=>anexarDocumentoCliente(e, selecionado.id)} disabled={enviandoDoc} style={{fontSize:11}}/>
+                {enviandoDoc && <span style={{fontSize:11,color:"var(--accent)"}}>Enviando…</span>}
+              </div>
+              {erroUploadDoc && <p style={{fontSize:11,color:"var(--red)",marginTop:6}}>{erroUploadDoc}</p>}
+              <p style={{fontSize:9.5,color:"var(--text3)",margin:"6px 0 0"}}>Aceita foto (JPG/PNG) ou PDF, até 8MB. "Extrair dados" lê o documento com IA e sugere preencher o cadastro.</p>
             </div>
             <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
               <button onClick={()=>excluirCliente(selecionado)} style={{...btnSec,color:"var(--red)",borderColor:"#F3B8B8",marginRight:"auto"}}>🗑 Excluir cliente</button>
@@ -6450,6 +6587,28 @@ function AppPrincipal({user}){
     setLeadsAtendimento(ls=>ls.filter(l=>l.id!==id));
     excluirNoSupabase("leads_atendimento", id);
   };
+
+  // Documentos pessoais anexados ao cadastro do cliente (RG, CPF, comprovantes etc.)
+  // Gravados/excluídos diretamente (fora do autoSave genérico) para não reenviar todos
+  // os arquivos em base64 a cada pequena alteração no sistema.
+  const [documentosCliente, setDocumentosCliente] = useState([]);
+  const adicionarDocumentoCliente = async (clienteId, doc) => {
+    const registro = { id: Date.now()+Math.floor(Math.random()*1000), clienteId, nome: doc.nome, tipo: doc.tipo, mime_type: doc.mimeType, arquivo_base64: doc.base64 };
+    setDocumentosCliente(ds=>[...ds, registro]);
+    if(sb){
+      try {
+        const { error } = await sb.from("documentos_cliente").insert({...registro, "clienteId": clienteId, user_id: uidUser});
+        if(error) throw error;
+      } catch(e){ console.error("Erro ao salvar documento do cliente:", e); }
+    }
+    return registro;
+  };
+  const excluirDocumentoCliente = (id) => {
+    if(!confirm("Excluir este documento? Esta ação não pode ser desfeita.")) return;
+    setDocumentosCliente(ds=>ds.filter(d=>d.id!==id));
+    excluirNoSupabase("documentos_cliente", id);
+  };
+
   const [oabNumeroConfig, setOabNumeroConfig] = useState(()=>{
     try { return localStorage.getItem("djen_oabNumero") || "155134"; } catch(e){ return "155134"; }
   });
@@ -6608,7 +6767,7 @@ function AppPrincipal({user}){
     (async () => {
       if(!sb){ setErroCarregamento(sbErroInicial||"Sem conexão com o banco."); setCarregandoDados(false); return; }
       try {
-        const tabelas = ["processos","clientes","parcelas","despesas","tarefas","agenda","equipe","intimacoes","leads_atendimento"];
+        const tabelas = ["processos","clientes","parcelas","despesas","tarefas","agenda","equipe","intimacoes","leads_atendimento","documentos_cliente"];
         // Cada tabela é carregada de forma independente: se uma tabela ainda não existir no
         // Supabase (ex: "intimacoes" não criada), o sistema não trava inteiro — só aquela
         // parte fica vazia, e um aviso aparece no rodapé da barra lateral.
@@ -6625,7 +6784,7 @@ function AppPrincipal({user}){
         const tabelasFaltando = resultados.filter(r=>r._tabelaFaltando).map(r=>r._tabelaFaltando);
         if(tabelasFaltando.length) setAvisoTabelasFaltando(tabelasFaltando);
         if(!ativo) return;
-        const [rProc, rCli, rParc, rDesp, rTar, rAg, rEq, rInt, rLeads] = resultados;
+        const [rProc, rCli, rParc, rDesp, rTar, rAg, rEq, rInt, rLeads, rDocsCli] = resultados;
         const parseCampo = (v, fallback) => { if(v===undefined||v===null) return fallback; if(typeof v==="string"){ try { return JSON.parse(v); } catch(_) { return fallback; } } return v; };
         // Importante: NUNCA cair de volta para os dados de teste (PROCS0/CLIENTES0/FINANC0/EQUIPE0)
         // quando a tabela estiver vazia — isso fazia os dados de teste "reaparecerem" toda vez
@@ -6653,6 +6812,7 @@ function AppPrincipal({user}){
         setEquipe(rEq.data||[]);
         setIntimacoes(rInt.data||[]);
         setLeadsAtendimento((rLeads.data||[]).filter(l=>l.status!=="processado"));
+        setDocumentosCliente(rDocsCli.data||[]);
       } catch(e) {
         setErroCarregamento(e.message || "Erro ao carregar dados.");
       }
@@ -6794,7 +6954,7 @@ function AppPrincipal({user}){
       <div style={{flex:1,overflow:"auto",padding:"24px 32px"}}>
         {pagina==="dashboard" && <PaginaDashboard processos={processos} parcelas={parcelas} clientes={clientes} tarefas={tarefas} setTarefas={setTarefas} agenda={agenda} equipe={equipe} intimacoes={intimacoes} onAbrirProcesso={abrirProcesso} onIrPara={irPara} setProcessos={setProcessos} setClientes={setClientes} onVerPrazoRapido={setPrazoRapido} leadsAtendimento={leadsAtendimento} onLeadProcessado={marcarLeadProcessado} onDescartarLead={descartarLead} classificacoesCustom={classificacoesCustom}/>}
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom} usuarioAtual={user?.email||"desconhecido"}/>}
-        {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)}/>}
+        {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)} documentosCliente={documentosCliente} onAdicionarDocumento={adicionarDocumentoCliente} onExcluirDocumento={excluirDocumentoCliente}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos}/>}
