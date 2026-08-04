@@ -3308,7 +3308,12 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
 
   const concluirTarefaProc = tarefaId => {
     if(!setTarefas) return;
+    const tarefa = (tarefas||[]).find(t=>t.id===tarefaId);
     setTarefas(ts=>ts.map(t=>t.id===tarefaId?{...t,status:"concluido"}:t));
+    if(tarefa?.origemPrazoProcId){
+      setProcessos(ps=>ps.map(p=>p.id===tarefa.origemPrazoProcId?registrarHistorico({...p,prazo:"",prazoAto:""}, "Prazo marcado como cumprido (via tarefa)", usuarioAtual):p));
+      setSelected(s=>s&&s.id===tarefa.origemPrazoProcId?{...s,prazo:"",prazoAto:""}:s);
+    }
   };
   const arquivarTarefaProc = tarefaId => {
     if(!setTarefas) return;
@@ -6130,7 +6135,7 @@ function CardTarefaDetalhado({t, processos, clientes, equipe, onAbrirProcesso, o
   );
 }
 
-function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbrirProcesso, onVerPrazoRapido}){
+function PaginaTarefas({tarefas, setTarefas, processos, setProcessos, clientes, equipe, onAbrirProcesso, onVerPrazoRapido}){
   const [editando,setEditando] = useState(null);
   const [novo,setNovo] = useState(false);
   const [filtroStatus,setFiltroStatus] = useState("todos");
@@ -6159,7 +6164,15 @@ function PaginaTarefas({tarefas, setTarefas, processos, clientes, equipe, onAbri
     setTarefas(ts=>form.id?ts.map(t=>t.id===form.id?form:t):[...ts,{...form,id:Date.now(),arquivada:false}]);
     setEditando(null); setNovo(false);
   };
-  const mudarStatus = (id, status) => setTarefas(ts=>ts.map(t=>t.id===id?{...t,status}:t));
+  const mudarStatus = (id, status) => {
+    setTarefas(ts=>ts.map(t=>t.id===id?{...t,status}:t));
+    if(status==="concluido"){
+      const tarefa = (tarefas||[]).find(t=>t.id===id);
+      if(tarefa?.origemPrazoProcId && setProcessos){
+        setProcessos(ps=>ps.map(p=>p.id===tarefa.origemPrazoProcId?{...p,prazo:"",prazoAto:""}:p));
+      }
+    }
+  };
   const arquivar = id => setTarefas(ts=>ts.map(t=>t.id===id?{...t,arquivada:true}:t));
   const excluir = id => {
     if(!confirm("Excluir este prazo/tarefa? Esta ação não pode ser desfeita.")) return;
@@ -7224,12 +7237,33 @@ function AppPrincipal({user}){
     })();
   }, [carregandoDados]);
 
+  // Correção única: prazos que já foram marcados como cumpridos (tarefa concluída)
+  // antes de existir a sincronização automática ficaram com o processo ainda
+  // mostrando "prazo em aberto". Ao carregar o sistema, confere e corrige isso
+  // sozinho, sem precisar de ação manual.
+  React.useEffect(()=>{
+    if(carregandoDados) return;
+    const idsParaLimpar = new Set(
+      (tarefas||[]).filter(t=>t.origemPrazoProcId && t.status==="concluido").map(t=>t.origemPrazoProcId)
+    );
+    if(idsParaLimpar.size===0) return;
+    const precisaLimpar = processos.some(p=>idsParaLimpar.has(p.id) && p.prazo);
+    if(!precisaLimpar) return;
+    setProcessos(ps=>ps.map(p=>(idsParaLimpar.has(p.id) && p.prazo) ? {...p, prazo:"", prazoAto:""} : p));
+  }, [carregandoDados]);
+
   const abrirProcesso = (proc) => { setAbrirProcessoId(proc.id); setPagina("processos"); };
 
   // Visualização rápida de prazo/tarefa: abre por cima da página atual, sem navegar,
   // para que ao fechar a pessoa continue no Dashboard ou em Prazos e Tarefas.
   const [prazoRapido, setPrazoRapido] = useState(null);
-  const concluirTarefaGlobal = (id) => setTarefas(ts=>ts.map(t=>t.id===id?{...t,status:"concluido"}:t));
+  const concluirTarefaGlobal = (id) => {
+    setTarefas(ts=>ts.map(t=>t.id===id?{...t,status:"concluido"}:t));
+    const tarefa = tarefas.find(t=>t.id===id);
+    if(tarefa?.origemPrazoProcId){
+      setProcessos(ps=>ps.map(p=>p.id===tarefa.origemPrazoProcId?{...p,prazo:"",prazoAto:""}:p));
+    }
+  };
   const irPara = (destino) => setPagina(destino);
 
   const NAV = [
@@ -7291,7 +7325,7 @@ function AppPrincipal({user}){
         {pagina==="processos" && <PaginaProcessos processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} mapas={mapas} setMapas={setMapas} onNovoCliente={()=>{setPagina("clientes");setClienteParaAbrir(true);}} abrirProcessoId={abrirProcessoId} onProcessoAberto={()=>setAbrirProcessoId(null)} tarefas={tarefas} setTarefas={setTarefas} setAgenda={setAgenda} setParcelas={setParcelas} classificacoesCustom={classificacoesCustom} setClassificacoesCustom={setClassificacoesCustom} usuarioAtual={user?.email||"desconhecido"}/>}
         {pagina==="clientes" && <PaginaClientes clientes={clientes} setClientes={setClientes} processos={processos} onAbrirProcesso={abrirProcesso} clienteParaAbrir={clienteParaAbrir} onClienteAberto={()=>setClienteParaAbrir(false)} documentosCliente={documentosCliente} onAdicionarDocumento={adicionarDocumentoCliente} onExcluirDocumento={excluirDocumentoCliente}/>}
         {pagina==="captacao" && <PaginaCaptacao leads={leadsCaptacao} onMoverStatus={moverStatusLead} onSalvarObservacoes={salvarObservacoesLead} onSalvarResponsavel={salvarResponsavelLead} onConverterCliente={converterLeadEmCliente} onAbrirCliente={()=>setPagina("clientes")}/>}
-        {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
+        {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} setProcessos={setProcessos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
         {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos} clientes={clientes}/>}
         {pagina==="relatorios" && <PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
