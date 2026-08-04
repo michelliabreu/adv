@@ -3325,12 +3325,33 @@ function PaginaProcessos({processos,setProcessos,clientes,setClientes,mapas,setM
     setSelected(s=>s&&s.id===id?{...s,vinculo}:s);
   };
   const salvarPartes = (id, partes) => {
+    const procAntigo = processos.find(p=>p.id===id);
+    const clienteIdsAntigos = new Set((procAntigo?.partes||[]).map(x=>x.clienteId).filter(v=>v && v!==true));
     const partesResolvidas = resolverClientesDasPartes(partes, clientes, setClientes);
+    const clienteIdsNovos = new Set(partesResolvidas.map(x=>x.clienteId).filter(v=>v && v!==true));
     const parteCliente = partesResolvidas.find(x=>x.clienteId && x.clienteId!==true);
     const autorFinal = nomesPorPolo({partes:partesResolvidas},"autor").join(" e ");
     const reuFinal = nomesPorPolo({partes:partesResolvidas},"reu").join(" e ");
-    setProcessos(ps=>ps.map(p=>p.id===id?registrarHistorico({...p, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:p.clienteId}, "Partes do processo editadas", usuarioAtual):p));
+    const processosAtualizados = processos.map(p=>p.id===id?registrarHistorico({...p, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:p.clienteId}, "Partes do processo editadas", usuarioAtual):p);
+    setProcessos(processosAtualizados);
     setSelected(s=>s&&s.id===id?{...s, partes:partesResolvidas, autor:autorFinal, reu:reuFinal, clienteId: parteCliente?parteCliente.clienteId:s.clienteId}:s);
+
+    // Quem deixou de estar marcado como "é o cliente" nesta edição: se não sobrar
+    // nenhum vínculo com essa pessoa em nenhum processo (nem como cliente principal,
+    // nem como parte marcada em outro processo), E ela tiver sido criada
+    // automaticamente (não cadastrada manualmente por você), remove do CRM sozinho —
+    // quem não está marcado como cliente não deve ficar parado no cadastro.
+    const removidos = [...clienteIdsAntigos].filter(cid=>!clienteIdsNovos.has(cid));
+    removidos.forEach(cid=>{
+      const aindaReferenciado = processosAtualizados.some(p=>p.clienteId===cid || (p.partes||[]).some(x=>x.clienteId===cid));
+      if(aindaReferenciado) return;
+      const clienteObj = clientes.find(c=>c.id===cid);
+      const foiAutoCriado = clienteObj?.obs?.includes("Criado automaticamente");
+      if(clienteObj && foiAutoCriado){
+        setClientes(cs=>cs.filter(c=>c.id!==cid));
+        excluirNoSupabase("clientes", cid);
+      }
+    });
   };
   const salvarResumoExecutivo = (id, resumo) => {
     const resumoCompleto = {...resumo, ultimaAtualizacao: new Date().toISOString()};
@@ -4098,12 +4119,29 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
     if(clienteParaAbrir){ setNovo(true); onClienteAberto(); }
   },[clienteParaAbrir]);
 
+  const procsDe = clienteId => processos.filter(p=>p.clienteId===clienteId);
+  const debitoDe = clienteId => procsDe(clienteId).reduce((s,p)=>s+(p.debito?.valor||0),0);
+
+  const [ordenacaoCliente,setOrdenacaoCliente] = useState({campo:"nome",direcao:"asc"});
+  const comparadoresCliente = {
+    nome: (a,b)=>a.nome.localeCompare(b.nome,"pt-BR"),
+    cpf: (a,b)=>(a.cpf||"").localeCompare(b.cpf||"","pt-BR"),
+    contato: (a,b)=>(a.email||"").localeCompare(b.email||"","pt-BR"),
+    processos: (a,b)=>procsDe(a.id).length-procsDe(b.id).length,
+    debito: (a,b)=>debitoDe(a.id)-debitoDe(b.id),
+  };
+  const alternarOrdenacaoCliente = campo => {
+    setOrdenacaoCliente(o=>o.campo===campo?{campo,direcao:o.direcao==="asc"?"desc":"asc"}:{campo,direcao:"asc"});
+  };
+
   const lista = useMemo(()=>{
     const q=busca.toLowerCase();
-    return clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.cpf.includes(q)||c.email.toLowerCase().includes(q));
-  },[clientes,busca]);
-
-  const procsDe = clienteId => processos.filter(p=>p.clienteId===clienteId);
+    const filtrados = clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||c.cpf.includes(q)||c.email.toLowerCase().includes(q));
+    const comparador = comparadoresCliente[ordenacaoCliente.campo] || comparadoresCliente.nome;
+    const ordenados = [...filtrados].sort(comparador);
+    if(ordenacaoCliente.direcao==="desc") ordenados.reverse();
+    return ordenados;
+  },[clientes,busca,ordenacaoCliente,processos]);
 
   const salvar = form => {
     setClientes(cs=>form.id?cs.map(c=>c.id===form.id?form:c):[...cs,{...form,id:Date.now()}]);
@@ -4121,6 +4159,27 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
     setClientes(cs=>cs.filter(x=>x.id!==c.id));
     setSelecionado(null);
     excluirNoSupabase("clientes", c.id);
+  };
+
+  // Clientes que foram criados automaticamente (ao marcar "é o cliente" numa parte)
+  // mas que hoje não estão mais marcados como cliente em nenhum processo — sobras de
+  // desmarcações feitas antes desta limpeza existir.
+  const clientesOrfaosAutoCriados = useMemo(()=>{
+    return clientes.filter(c=>{
+      const foiAutoCriado = c.obs?.includes("Criado automaticamente");
+      if(!foiAutoCriado) return false;
+      const referenciado = processos.some(p=>p.clienteId===c.id || (p.partes||[]).some(x=>x.clienteId===c.id));
+      return !referenciado;
+    });
+  },[clientes,processos]);
+
+  const limparOrfaos = () => {
+    if(clientesOrfaosAutoCriados.length===0) return;
+    const nomes = clientesOrfaosAutoCriados.map(c=>c.nome).join(", ");
+    if(!confirm(`Remover ${clientesOrfaosAutoCriados.length} cadastro(s) sem vínculo: ${nomes}?\n\nForam criados automaticamente ao marcar "é o cliente" em algum processo, mas não estão mais marcados em nenhum. Esta ação não pode ser desfeita.`)) return;
+    const ids = clientesOrfaosAutoCriados.map(c=>c.id);
+    setClientes(cs=>cs.filter(c=>!ids.includes(c.id)));
+    excluirNoSupabase("clientes", ids);
   };
 
   const montarQualificacao = montarQualificacaoCliente;
@@ -4236,7 +4295,12 @@ Use string vazia em qualquer campo que não aparecer claramente no documento. Nu
           <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Clientes</h1>
           <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{clientes.length} cliente(s) cadastrados — CRM do escritório</p>
         </div>
-        <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo cliente</button>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {clientesOrfaosAutoCriados.length>0 && (
+            <button onClick={limparOrfaos} title={clientesOrfaosAutoCriados.map(c=>c.nome).join(", ")} style={{...btnSec,padding:"9px 14px",fontSize:11.5,color:"var(--amber)",borderColor:"#F5CE85"}}>🧹 Limpar {clientesOrfaosAutoCriados.length} sem vínculo</button>
+          )}
+          <button onClick={()=>setNovo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo cliente</button>
+        </div>
       </div>
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"8px 14px",marginBottom:12}}>
@@ -4245,7 +4309,12 @@ Use string vazia em qualquer campo que não aparecer claramente no documento. Nu
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 1.2fr .8fr .9fr",padding:"9px 14px",background:"var(--bg2)",borderBottom:"1px solid var(--border1)"}}>
-          {["Nome","CPF","Contato","Processos","Débito total"].map(h=><span key={h} style={hdr}>{h}</span>)}
+          {[["nome","Nome"],["cpf","CPF"],["contato","Contato"],["processos","Processos"],["debito","Débito total"]].map(([campo,label])=>(
+            <span key={campo} onClick={()=>alternarOrdenacaoCliente(campo)} style={{...hdr,cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}>
+              {label}
+              <Icon name={ordenacaoCliente.campo===campo && ordenacaoCliente.direcao==="desc" ? "chevronDown" : "chevronUp"} size={11} color={ordenacaoCliente.campo===campo ? "var(--accent)" : "var(--border3)"}/>
+            </span>
+          ))}
         </div>
         {lista.length===0?<div style={{padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum cliente encontrado.</div>:lista.map((c,i)=>{
           const procs = procsDe(c.id);
