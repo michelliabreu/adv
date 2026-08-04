@@ -4081,6 +4081,8 @@ function PaginaClientes({clientes, setClientes, processos, onAbrirProcesso, clie
   const [editando,setEditando]=useState(null);
   const [novo,setNovo]=useState(false);
   const [selecionado,setSelecionado]=useState(null);
+  const [editandoCliente,setEditandoCliente]=useState(false);
+  const [formEdicao,setFormEdicao]=useState(null);
   const [qualifCopiada,setQualifCopiada]=useState(null);
   const [gerandoDoc,setGerandoDoc]=useState(null); // 'procuracao' | null
   const [erroDoc,setErroDoc]=useState("");
@@ -4273,20 +4275,66 @@ Use string vazia em qualquer campo que não aparecer claramente no documento. Nu
           <div style={{background:"#fff",width:600,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:48,height:48,borderRadius:"50%",background:"var(--navy)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700}}>{selecionado.nome.charAt(0).toUpperCase()}</div>
-                <div>
-                  <p style={{fontSize:16,fontWeight:700,margin:"0 0 2px",color:"var(--navy)"}}>{selecionado.nome}</p>
-                  <p style={{fontSize:11.5,color:"var(--text2)",margin:0}}>{selecionado.cpf||"CPF não informado"}</p>
+                <div style={{width:48,height:48,borderRadius:"50%",background:"var(--navy)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,flexShrink:0}}>{selecionado.nome.charAt(0).toUpperCase()}</div>
+                {editandoCliente ? (
+                  <div style={{flex:1}}>
+                    <input value={formEdicao.nome} onChange={e=>setFormEdicao(x=>({...x,nome:e.target.value}))} style={{...inp,fontSize:15,fontWeight:700,padding:"6px 9px",marginBottom:4}} placeholder="Nome completo"/>
+                    <input value={formEdicao.cpf} onChange={e=>setFormEdicao(x=>({...x,cpf:fmtCPF(e.target.value)}))} style={{...inp,fontSize:11.5,padding:"4px 9px"}} placeholder="CPF"/>
+                  </div>
+                ) : (
+                  <div>
+                    <p style={{fontSize:16,fontWeight:700,margin:"0 0 2px",color:"var(--navy)"}}>{selecionado.nome}</p>
+                    <p style={{fontSize:11.5,color:"var(--text2)",margin:0}}>{selecionado.cpf||"CPF não informado"}</p>
+                  </div>
+                )}
+              </div>
+              <button onClick={()=>{setSelecionado(null);setEditandoCliente(false);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:0,lineHeight:1}}>×</button>
+            </div>
+
+            {editandoCliente ? (
+              <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div><span style={lbl}>RG</span><input value={formEdicao.rg||""} onChange={e=>setFormEdicao(x=>({...x,rg:e.target.value}))} style={inp}/></div>
+                  <div><span style={lbl}>Profissão</span><input value={formEdicao.profissao||""} onChange={e=>setFormEdicao(x=>({...x,profissao:e.target.value}))} style={inp}/></div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div><span style={lbl}>Estado civil</span>
+                    <select value={formEdicao.estadoCivil||""} onChange={e=>setFormEdicao(x=>({...x,estadoCivil:e.target.value}))} style={{...inp,padding:"7px 8px"}}>
+                      <option value="">Selecione…</option>
+                      {ESTADOS_CIVIS.map(ec=><option key={ec} value={ec}>{ec}</option>)}
+                    </select>
+                  </div>
+                  <div><span style={lbl}>Nacionalidade</span><input value={formEdicao.nacionalidade||""} onChange={e=>setFormEdicao(x=>({...x,nacionalidade:e.target.value}))} style={inp}/></div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div><span style={lbl}>Telefone</span><input value={formEdicao.telefone||""} onChange={e=>setFormEdicao(x=>({...x,telefone:fmtTelefone(e.target.value)}))} style={inp}/></div>
+                  <div><span style={lbl}>E-mail</span><input type="email" value={formEdicao.email||""} onChange={e=>setFormEdicao(x=>({...x,email:e.target.value}))} style={inp}/></div>
+                </div>
+                <div><span style={lbl}>Endereço</span><input value={formEdicao.endereco||""} onChange={e=>setFormEdicao(x=>({...x,endereco:e.target.value}))} style={inp}/></div>
+                <div><span style={lbl}>Observações</span><textarea value={formEdicao.obs||""} onChange={e=>setFormEdicao(x=>({...x,obs:e.target.value}))} style={{...inp,minHeight:70,resize:"vertical"}}/></div>
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                  <button onClick={()=>setEditandoCliente(false)} style={btnSec}>Cancelar</button>
+                  <button onClick={()=>{
+                    if(!formEdicao.nome.trim()){ alert("Informe o nome do cliente."); return; }
+                    salvar(formEdicao);
+                    setSelecionado(formEdicao);
+                    setEditandoCliente(false);
+                  }} style={btnPri}>Salvar alterações</button>
                 </div>
               </div>
-              <button onClick={()=>setSelecionado(null)} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"var(--text2)",padding:0,lineHeight:1}}>×</button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 20px",marginBottom:16}}>
-              {[["E-mail",selecionado.email||"—"],["Telefone",selecionado.telefone||"—"],["Endereço",selecionado.endereco||"—"]].map(([k,v])=>(
-                <div key={k}><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>{k}</p><p style={{fontSize:13,margin:0}}>{v}</p></div>
-              ))}
-            </div>
-            {selecionado.obs&&<div style={{background:"var(--bg2)",borderRadius:6,padding:"10px 12px",fontSize:12,color:"var(--text2)",marginBottom:16}}>{selecionado.obs}</div>}
+            ) : (
+              <>
+                <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+                  <button onClick={()=>{setFormEdicao(selecionado);setEditandoCliente(true);}} style={{...btnSec,fontSize:11,padding:"5px 12px"}}>✎ Editar cadastro</button>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 20px",marginBottom:16}}>
+                  {[["RG",selecionado.rg||"—"],["Profissão",selecionado.profissao||"—"],["Estado civil",selecionado.estadoCivil||"—"],["Nacionalidade",selecionado.nacionalidade||"—"],["E-mail",selecionado.email||"—"],["Telefone",selecionado.telefone||"—"],["Endereço",selecionado.endereco||"—"]].map(([k,v])=>(
+                    <div key={k}><p style={{fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",margin:"0 0 3px",fontWeight:600}}>{k}</p><p style={{fontSize:13,margin:0}}>{v}</p></div>
+                  ))}
+                </div>
+                {selecionado.obs&&<div style={{background:"var(--bg2)",borderRadius:6,padding:"10px 12px",fontSize:12,color:"var(--text2)",marginBottom:16}}>{selecionado.obs}</div>}
+              </>
+            )}
             <div style={{borderTop:"1px solid var(--border1)",paddingTop:14}}>
               <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",color:"var(--text2)",margin:"0 0 10px"}}>Processos vinculados ({procsDe(selecionado.id).length})</p>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -4311,7 +4359,7 @@ Use string vazia em qualquer campo que não aparecer claramente no documento. Nu
                 <button onClick={()=>copiarQualificacao(selecionado)} style={{...btnSec,fontSize:10.5,padding:"5px 11px",color:qualifCopiada===selecionado.id?"var(--green)":"var(--accent)",borderColor:qualifCopiada===selecionado.id?"#A8DDB8":"var(--border2)"}}>{qualifCopiada===selecionado.id?"✓ Copiado!":"📋 Copiar qualificação"}</button>
               </div>
               <div style={{background:"var(--bg2)",borderRadius:6,padding:"10px 12px",fontSize:12,color:"var(--text1)",lineHeight:1.6,fontStyle:"italic"}}>{montarQualificacao(selecionado)}</div>
-              <p style={{fontSize:10,color:"var(--text3)",margin:"6px 0 0"}}>Dados faltantes (RG, estado civil, profissão, etc.) podem ser preenchidos em "Editar cliente".</p>
+              <p style={{fontSize:10,color:"var(--text3)",margin:"6px 0 0"}}>Dados faltantes (RG, estado civil, profissão, etc.) podem ser preenchidos clicando em "✎ Editar cadastro" logo abaixo.</p>
               <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
                 <button onClick={()=>gerarProcuracao(selecionado)} disabled={gerandoDoc==="procuracao"} style={{...btnSec,fontSize:11,padding:"6px 12px",opacity:gerandoDoc==="procuracao"?.6:1}}>{gerandoDoc==="procuracao"?"Gerando…":"📄 Gerar procuração (Word)"}</button>
                 <button onClick={()=>setAbrindoContrato(true)} style={{...btnSec,fontSize:11,padding:"6px 12px"}}>📄 Gerar contrato de honorários</button>
@@ -4366,7 +4414,6 @@ Use string vazia em qualquer campo que não aparecer claramente no documento. Nu
             </div>
             <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>
               <button onClick={()=>excluirCliente(selecionado)} style={{...btnSec,color:"var(--red)",borderColor:"#F3B8B8",marginRight:"auto"}}>🗑 Excluir cliente</button>
-              <button onClick={()=>{setEditando(selecionado);setSelecionado(null);}} style={btnSec}>Editar cliente</button>
               <button onClick={()=>setSelecionado(null)} style={btnPri}>Fechar</button>
             </div>
           </div>
