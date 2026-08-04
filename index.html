@@ -4955,14 +4955,30 @@ Use string vazia quando não identificar o dado com segurança. "parteClienteEhA
     }).sort((a,b)=>(b.dataDisponibilizacao||"").localeCompare(a.dataDisponibilizacao||""));
   },[intimacoes,filtro]);
 
-  const marcarLida = id => setIntimacoes(is=>is.map(i=>i.id===id?{...i,lida:true}:i));
-  const arquivar = id => setIntimacoes(is=>is.map(i=>i.id===id?{...i,arquivada:true,lida:true}:i));
+  // Salva direto no Supabase (sem esperar o debounce do autoSave), porque "marcar como
+  // lida" é uma ação rápida — se a pessoa fechar ou recarregar a página logo em seguida,
+  // o autoSave (que só grava ~1,2s depois da mudança) pode não ter salvado ainda.
+  const salvarCampoIntimacaoImediato = async (id, campos) => {
+    if(!sb) return;
+    try { const { error } = await sb.from("intimacoes").update(campos).eq("id", id); if(error) throw error; }
+    catch(e){ console.error("Erro ao salvar intimação:", e); }
+  };
+  const marcarLida = id => {
+    setIntimacoes(is=>is.map(i=>i.id===id?{...i,lida:true}:i));
+    salvarCampoIntimacaoImediato(id, {lida:true});
+  };
+  const arquivar = id => {
+    setIntimacoes(is=>is.map(i=>i.id===id?{...i,arquivada:true,lida:true}:i));
+    salvarCampoIntimacaoImediato(id, {arquivada:true,lida:true});
+  };
 
   // Ao vincular uma intimação a um processo, o texto da publicação também é lançado
   // como andamento do processo — assim ela já aparece no histórico/relatório dele.
   const vincularProcesso = (intimacaoId, procId) => {
     const intimacao = (intimacoes||[]).find(i=>i.id===intimacaoId);
-    setIntimacoes(is=>is.map(i=>i.id===intimacaoId?{...i,procId:procId?parseInt(procId):null}:i));
+    const procIdFinal = procId?parseInt(procId):null;
+    setIntimacoes(is=>is.map(i=>i.id===intimacaoId?{...i,procId:procIdFinal}:i));
+    salvarCampoIntimacaoImediato(intimacaoId, {"procId":procIdFinal});
     if(procId && intimacao?.texto){
       const novoProcId = parseInt(procId);
       setProcessos(ps=>ps.map(p=>{
