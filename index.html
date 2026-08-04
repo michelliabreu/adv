@@ -2148,15 +2148,15 @@ async function buscarDataJud(numero){
   const indice = detectarIndiceDataJud(numero);
   let res;
   try {
-    res = await fetch(`https://api-publica.datajud.cnj.jus.br/${indice}/_search`,{method:"POST",headers:{"Authorization":"APIKey cDZHYzlZa0JadVREZDJCendFbXNYR1NtYXNzY3BqZVM=","Content-Type":"application/json"},body:JSON.stringify({query:{match:{numeroProcesso:numero.trim()}},size:1})});
+    res = await fetch(`https://api-publica.datajud.cnj.jus.br/${indice}/_search`,{method:"POST",headers:{"Authorization":"APIKey cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==","Content-Type":"application/json"},body:JSON.stringify({query:{match:{numeroProcesso:numero.replace(/\D/g,"")}},size:1})});
   } catch(networkErr) {
     throw new Error("Não foi possível conectar ao DataJud — o navegador bloqueou a requisição (CORS) ou não há conexão com a internet.");
   }
-  if(res.status===401||res.status===403) throw new Error("Chave de API do DataJud inválida ou expirada. Gere uma chave própria em datajud.cnj.jus.br e atualize o código.");
+  if(res.status===401||res.status===403) throw new Error("Chave de API do DataJud inválida ou expirada. Confira a chave atual em https://datajud-wiki.cnj.jus.br/api-publica/acesso/ e atualize o código.");
   if(!res.ok) throw new Error(`Erro HTTP ${res.status} ao consultar o índice ${indice}.`);
   const data=await res.json();
   const hit=data?.hits?.hits?.[0]?._source;
-  if(!hit)throw new Error(`Processo não encontrado no índice ${indice}. Confira o número ou se o tribunal está correto.`);
+  if(!hit)throw new Error(`Processo não encontrado no índice ${indice}. Se for processo em segredo de justiça, o DataJud não libera esses dados — confira manualmente. Senão, confira o número ou se o tribunal está correto.`);
   return hit;
 }
 function parsarMovimentos(hit){return(hit.movimentos||[]).map(m=>({data:m.dataHora?m.dataHora.slice(0,10):"—",desc:m.nome||m.complementosTabelados?.[0]?.descricao||"Movimentação",fonte:"cnj"})).sort((a,b)=>a.data.localeCompare(b.data));}
