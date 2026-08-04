@@ -1467,7 +1467,15 @@ function ParteLinha({parte, updParte, delParte, clientes}){
 }
 function PartesEditor({partes, setPartes, clientes}){
   const addParte = (polo) => setPartes(ps=>[...ps, {id:uid(), nome:"", polo, clienteId:null}]);
-  const updParte = (id, campo, valor) => setPartes(ps=>ps.map(x=>x.id===id?{...x,[campo]:valor}:x));
+  // Marcar uma parte como "é o cliente" desmarca automaticamente as demais — evita que
+  // duas partes fiquem marcadas ao mesmo tempo (o que causava ambiguidade: o sistema
+  // pegava a primeira marcada que encontrasse na lista, nem sempre a certa).
+  const updParte = (id, campo, valor) => setPartes(ps=>{
+    if(campo==="clienteId" && valor){
+      return ps.map(x=>x.id===id?{...x,clienteId:valor}:{...x,clienteId:null});
+    }
+    return ps.map(x=>x.id===id?{...x,[campo]:valor}:x);
+  });
   const delParte = (id) => setPartes(ps=>ps.filter(x=>x.id!==id));
   const autores = partes.filter(x=>x.polo==="autor");
   const reus = partes.filter(x=>x.polo==="reu");
@@ -1884,7 +1892,7 @@ Use string vazia em qualquer campo que não puder ser determinado com segurança
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
                     <input value={f.autor||""} onChange={e=>s("autor",e.target.value)} style={{...inp,flex:1}}/>
                     <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:f.autorEhCliente?"var(--accent)":"var(--text2)",fontWeight:f.autorEhCliente?600:400,whiteSpace:"nowrap",cursor:"pointer"}}>
-                      <input type="checkbox" checked={!!f.autorEhCliente} onChange={e=>s("autorEhCliente",e.target.checked)} style={{width:14,height:14,cursor:"pointer"}}/>
+                      <input type="checkbox" checked={!!f.autorEhCliente} onChange={e=>setF(x=>({...x,autorEhCliente:e.target.checked,reuEhCliente:e.target.checked?false:x.reuEhCliente}))} style={{width:14,height:14,cursor:"pointer"}}/>
                       É o cliente
                     </label>
                   </div>
@@ -1894,7 +1902,7 @@ Use string vazia em qualquer campo que não puder ser determinado com segurança
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
                     <input value={f.reu||""} onChange={e=>s("reu",e.target.value)} style={{...inp,flex:1}}/>
                     <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:f.reuEhCliente?"var(--accent)":"var(--text2)",fontWeight:f.reuEhCliente?600:400,whiteSpace:"nowrap",cursor:"pointer"}}>
-                      <input type="checkbox" checked={!!f.reuEhCliente} onChange={e=>s("reuEhCliente",e.target.checked)} style={{width:14,height:14,cursor:"pointer"}}/>
+                      <input type="checkbox" checked={!!f.reuEhCliente} onChange={e=>setF(x=>({...x,reuEhCliente:e.target.checked,autorEhCliente:e.target.checked?false:x.autorEhCliente}))} style={{width:14,height:14,cursor:"pointer"}}/>
                       É o cliente
                     </label>
                   </div>
@@ -2025,16 +2033,67 @@ function ModalFormCliente({cliente,onSave,onClose}){
 let _pid=100;
 const mkParcelas=(procId,cliente,total,n,inicio)=>Array.from({length:n},(_,i)=>{const d=new Date(inicio+"T00:00:00");d.setMonth(d.getMonth()+i);const yy=d.getFullYear(),mm=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return{id:_pid++,procId,cliente,totalContrato:total,parcela:i+1,totalParcelas:n,valor:parseFloat((total/n).toFixed(2)),vencimento:`${yy}-${mm}-${dd}`,pago:i<2};});
 
-function ModalAcordo({processos,onSave,onClose}){
-  const [f,setF]=useState({procId:"",cliente:"",total:"",parcelas:"",inicio:""});
+function ModalAcordo({processos,clientes,onSave,onClose}){
+  const [buscaCliente,setBuscaCliente]=useState("");
+  const [clienteSelecionado,setClienteSelecionado]=useState(null);
+  const [mostrarSugestoes,setMostrarSugestoes]=useState(false);
+  const [f,setF]=useState({procId:"",total:"",parcelas:"",inicio:""});
   const s=(k,v)=>setF(x=>({...x,[k]:v}));
+
+  const sugestoes = useMemo(()=>{
+    const q = buscaCliente.trim().toLowerCase();
+    if(!q) return [];
+    return (clientes||[]).filter(c=>c.nome.toLowerCase().includes(q)).slice(0,8);
+  },[buscaCliente,clientes]);
+
+  const selecionarCliente = (c) => {
+    setClienteSelecionado(c);
+    setBuscaCliente(c.nome);
+    setMostrarSugestoes(false);
+    setF(x=>({...x,procId:""}));
+  };
+
+  const processosDoCliente = clienteSelecionado ? processos.filter(p=>p.clienteId===clienteSelecionado.id) : [];
+
   return(
     <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(15,38,69,.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#fff",width:480,maxWidth:"100%",borderRadius:10,padding:"1.75rem",boxShadow:"0 25px 60px rgba(0,0,0,.3)"}}>
-        <p style={{fontSize:15,fontWeight:700,margin:"0 0 18px",color:"var(--navy)"}}>Novo acordo de pagamento</p>
+        <p style={{fontSize:15,fontWeight:700,margin:"0 0 18px",color:"var(--navy)"}}>Nova entrada</p>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div><span style={lbl}>Processo</span><select value={f.procId} onChange={e=>{const p=processos.find(x=>x.id===parseInt(e.target.value));setF(x=>({...x,procId:e.target.value,cliente:p?p.autor:""}));}} style={{...inp,padding:"7px 8px"}}><option value="">Selecione…</option>{processos.map(p=><option key={p.id} value={p.id}>{p.numero.slice(0,20)}… — {p.autor}</option>)}</select></div>
-          <div><span style={lbl}>Cliente</span><input value={f.cliente} onChange={e=>s("cliente",e.target.value)} style={inp}/></div>
+          <div style={{position:"relative"}}>
+            <span style={lbl}>Cliente</span>
+            <input
+              value={buscaCliente}
+              onChange={e=>{ setBuscaCliente(e.target.value); setClienteSelecionado(null); setMostrarSugestoes(true); }}
+              onFocus={()=>setMostrarSugestoes(true)}
+              onBlur={()=>setTimeout(()=>setMostrarSugestoes(false),150)}
+              placeholder="Digite o nome do cliente…"
+              style={inp}
+              autoFocus
+            />
+            {mostrarSugestoes && sugestoes.length>0 && (
+              <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1px solid var(--border1)",borderRadius:6,marginTop:4,boxShadow:"0 8px 20px rgba(0,0,0,.12)",zIndex:20,maxHeight:180,overflow:"auto"}}>
+                {sugestoes.map(c=>(
+                  <div key={c.id} onMouseDown={()=>selecionarCliente(c)} style={{padding:"8px 12px",fontSize:12.5,cursor:"pointer",borderBottom:"1px solid var(--border1)"}}>{c.nome}</div>
+                ))}
+              </div>
+            )}
+            {buscaCliente.trim() && !clienteSelecionado && (
+              <p style={{fontSize:10.5,color:"var(--text3)",margin:"5px 0 0"}}>Nenhum cliente cadastrado com esse nome ainda selecionado — se salvar assim, a entrada fica com esse nome digitado, sem vínculo com um cliente do CRM.</p>
+            )}
+          </div>
+
+          {clienteSelecionado && (
+            <div>
+              <span style={lbl}>Processo <span style={{color:"var(--text3)",fontWeight:400,textTransform:"none"}}>(opcional)</span></span>
+              <select value={f.procId} onChange={e=>s("procId",e.target.value)} style={{...inp,padding:"7px 8px"}}>
+                <option value="">Nenhum processo vinculado</option>
+                {processosDoCliente.map(p=><option key={p.id} value={p.id}>{p.numero}</option>)}
+              </select>
+              {processosDoCliente.length===0 && <p style={{fontSize:10.5,color:"var(--text3)",margin:"4px 0 0"}}>Este cliente não tem processo cadastrado — tudo bem, o processo é opcional.</p>}
+            </div>
+          )}
+
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
             <div><span style={lbl}>Valor total (R$)</span><input type="number" value={f.total} onChange={e=>s("total",e.target.value)} style={inp}/></div>
             <div><span style={lbl}>Nº parcelas</span><input type="number" min="1" max="60" value={f.parcelas} onChange={e=>s("parcelas",e.target.value)} style={inp}/></div>
@@ -2044,7 +2103,11 @@ function ModalAcordo({processos,onSave,onClose}){
         </div>
         <div style={{marginTop:20,display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={btnSec}>Cancelar</button>
-          <button onClick={()=>{if(!f.procId||!f.total||!f.parcelas||!f.inicio){alert("Preencha todos os campos.");return;}onSave(mkParcelas(parseInt(f.procId),f.cliente,parseFloat(f.total),parseInt(f.parcelas),f.inicio));}} style={btnPri}>Salvar</button>
+          <button onClick={()=>{
+            if(!buscaCliente.trim()||!f.total||!f.parcelas||!f.inicio){alert("Preencha ao menos o nome do cliente, o valor, o nº de parcelas e a data da 1ª parcela.");return;}
+            const nomeFinal = clienteSelecionado ? clienteSelecionado.nome : buscaCliente.trim();
+            onSave(mkParcelas(f.procId?parseInt(f.procId):null,nomeFinal,parseFloat(f.total),parseInt(f.parcelas),f.inicio));
+          }} style={btnPri}>Salvar</button>
         </div>
       </div>
     </div>
@@ -4363,7 +4426,7 @@ function ModalFormDespesa({despesa, onSave, onClose}){
     </div>
   );
 }
-function PaginaFinanceiro({parcelas,setParcelas,despesas,setDespesas,processos}){
+function PaginaFinanceiro({parcelas,setParcelas,despesas,setDespesas,processos,clientes}){
   const [abaFinanceiro,setAbaFinanceiro] = useState("honorarios");
   const [novoAcordo,setNovoAcordo]=useState(false);
   const [filtroCli,setFiltroCli]=useState("");
@@ -4418,7 +4481,7 @@ function PaginaFinanceiro({parcelas,setParcelas,despesas,setDespesas,processos})
   const lista=useMemo(()=>{const q=filtroCli.toLowerCase();return parcelasDoMes.filter(p=>{const st=statusParcela(p);return(!q||p.cliente.toLowerCase().includes(q))&&(filtroSt==="todos"||st===filtroSt);}).sort((a,b)=>new Date(a.vencimento)-new Date(b.vencimento));},[parcelasDoMes,filtroCli,filtroSt]);
   const marcarPago=id=>setParcelas(ps=>ps.map(p=>p.id===id?{...p,pago:!p.pago}:p));
   const vencendoHoje=parcelas.filter(p=>!p.pago&&diasRest(p.vencimento)>=0&&diasRest(p.vencimento)<=7);
-  const procNum=id=>processos.find(p=>p.id===id)?.numero?.slice(0,22)+"…"||`Proc. ${id}`;
+  const procNum=id=>id?(processos.find(p=>p.id===id)?.numero?.slice(0,22)+"…"||`Proc. ${id}`):"Sem processo vinculado";
   const hdr={fontSize:10,textTransform:"uppercase",letterSpacing:".6px",color:"var(--text2)",fontWeight:700};
   const idsVisiveis = lista.map(p=>p.id);
   const qtdSelecionados = idsVisiveis.filter(id=>selecionados[id]).length;
@@ -4459,7 +4522,7 @@ function PaginaFinanceiro({parcelas,setParcelas,despesas,setDespesas,processos})
           <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>Controle de honorários, parcelas e despesas</p>
         </div>
         {abaFinanceiro==="honorarios"
-          ? <button onClick={()=>setNovoAcordo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Novo acordo</button>
+          ? <button onClick={()=>setNovoAcordo(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Nova entrada</button>
           : <button onClick={()=>setNovaDespesa(true)} style={{...btnPri,padding:"9px 18px",fontSize:12.5}}>+ Nova despesa</button>
         }
       </div>
@@ -4512,7 +4575,7 @@ function PaginaFinanceiro({parcelas,setParcelas,despesas,setDespesas,processos})
         {lista.length===0?<div style={{padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhuma parcela encontrada.</div>:lista.map((p,i)=>{const st=statusParcela(p),cfg=PC[st];return(
           <div key={p.id} style={{display:"grid",gridTemplateColumns:"34px 2fr 1.2fr .8fr .9fr .9fr .8fr 40px",padding:"11px 14px",alignItems:"center",borderBottom:i<lista.length-1?"1px solid var(--border1)":"none",background:selecionados[p.id]?"var(--accent-light)":st==="vencido"?"rgba(185,28,28,.03)":st==="aVencer"?"rgba(180,83,9,.04)":"transparent"}}>
             <input type="checkbox" checked={!!selecionados[p.id]} onChange={()=>toggleUm(p.id)} style={{width:15,height:15,cursor:"pointer"}}/>
-            <div><p style={{fontSize:11,fontFamily:"monospace",color:"var(--text2)",margin:"0 0 2px"}}>{procNum(p.procId)}</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.cliente}</p></div>
+            <div><p style={{fontSize:11,fontFamily:p.procId?"monospace":"inherit",fontStyle:p.procId?"normal":"italic",color:"var(--text2)",margin:"0 0 2px"}}>{procNum(p.procId)}</p><p style={{fontSize:13,fontWeight:600,margin:0}}>{p.cliente}</p></div>
             <div style={{fontSize:12,color:"var(--text2)"}}>{p.parcela} / {p.totalParcelas}</div>
             <div style={{fontSize:13,fontWeight:700}}>{fmtBRL(p.valor)}</div>
             <div style={{fontSize:12}}>{fmtData(p.vencimento)}</div>
@@ -4523,7 +4586,7 @@ function PaginaFinanceiro({parcelas,setParcelas,despesas,setDespesas,processos})
         );})}
       </div>
       <p style={{fontSize:11,color:"var(--text2)",marginTop:8,textAlign:"right"}}>{lista.length} parcela(s)</p>
-      {novoAcordo&&<ModalAcordo processos={processos} onSave={ps=>{setParcelas(x=>[...x,...ps]);setNovoAcordo(false);}} onClose={()=>setNovoAcordo(false)}/>}
+      {novoAcordo&&<ModalAcordo processos={processos} clientes={clientes} onSave={ps=>{setParcelas(x=>[...x,...ps]);setNovoAcordo(false);}} onClose={()=>setNovoAcordo(false)}/>}
       </>
       ) : (
       <>
@@ -7114,7 +7177,7 @@ function AppPrincipal({user}){
         {pagina==="captacao" && <PaginaCaptacao leads={leadsCaptacao} onMoverStatus={moverStatusLead} onSalvarObservacoes={salvarObservacoesLead} onSalvarResponsavel={salvarResponsavelLead} onConverterCliente={converterLeadEmCliente} onAbrirCliente={()=>setPagina("clientes")}/>}
         {pagina==="tarefas" && <PaginaTarefas tarefas={tarefas} setTarefas={setTarefas} processos={processos} clientes={clientes} equipe={equipe} onAbrirProcesso={abrirProcesso} onVerPrazoRapido={setPrazoRapido}/>}
         {pagina==="agenda" && <PaginaAgenda agenda={agenda} setAgenda={setAgenda} processos={processos} clientes={clientes} equipe={equipe} tarefas={tarefas} onAbrirProcesso={abrirProcesso} onIrParaTarefa={()=>setPagina("tarefas")} googleConectado={!!googleToken} googleSincronizando={googleSincronizando} googleUltimaSinc={googleUltimaSinc} googleErro={googleErro} onConectarGoogle={conectarGoogle} onDesconectarGoogle={desconectarGoogle} onSincronizarGoogle={()=>sincronizarComGoogle()} onEnviarAoGoogle={enviarCompromissoAoGoogle} onExcluirNoGoogle={excluirEventoNoGoogle}/>}
-        {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos}/>}
+        {pagina==="financeiro" && <PaginaFinanceiro parcelas={parcelas} setParcelas={setParcelas} despesas={despesas} setDespesas={setDespesas} processos={processos} clientes={clientes}/>}
         {pagina==="relatorios" && <PaginaRelatorios processos={processos} parcelas={parcelas} clientes={clientes}/>}
         {pagina==="intimacoes" && <PaginaIntimacoes intimacoes={intimacoes} setIntimacoes={setIntimacoes} processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes} equipe={equipe} setTarefas={setTarefas} onAbrirProcesso={abrirProcesso} configDjen={{oabNumero:oabNumeroConfig, oabUf:oabUfConfig, salvarConfig:salvarConfigDjen}}/>}
         {pagina==="importacao" && <PaginaImportacao processos={processos} setProcessos={setProcessos} clientes={clientes} setClientes={setClientes}/>}
