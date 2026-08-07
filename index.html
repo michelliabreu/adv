@@ -1374,7 +1374,7 @@ function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUp
 
         <div style={{borderTop:"1px solid var(--border1)",paddingTop:14,marginTop:16}}>
           <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"1px solid var(--border1)"}}>
-            {["andamentos","tarefas","documentacao","checklist"].map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:tab===t?"2px solid var(--navy2)":"2px solid transparent",color:tab===t?"var(--navy2)":"var(--text2)",padding:"6px 18px 8px",fontSize:12,fontWeight:tab===t?600:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".6px",marginBottom:-1,whiteSpace:"nowrap"}}>{t==="documentacao"?"Documentação":t==="checklist"?"Obs / Checklist":t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
+            {["andamentos","cnj","tarefas","documentacao","checklist"].map(t=><button key={t} onClick={()=>setTab(t)} style={{background:"none",border:"none",borderBottom:tab===t?"2px solid var(--navy2)":"2px solid transparent",color:tab===t?"var(--navy2)":"var(--text2)",padding:"6px 18px 8px",fontSize:12,fontWeight:tab===t?600:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".6px",marginBottom:-1,whiteSpace:"nowrap"}}>{t==="documentacao"?"Documentação":t==="checklist"?"Obs / Checklist":t==="cnj"?`CNJ${(p.movimentacoesCnj||[]).length?` (${(p.movimentacoesCnj||[]).length})`:""}`:t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
           </div>
           {tab==="andamentos"&&<div>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
@@ -1422,6 +1422,23 @@ function ModalDetalhe({p,cliente,clientes,processos,onClose,onEdit,onChecklistUp
                     <button onClick={()=>{setAndamentoEditando(a);setAndEditForm({data:a.data,desc:a.desc});}} title="Editar" style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:12,padding:0}}>✎</button>
                     <button onClick={()=>onExcluirAndamento(p.id, a)} title="Excluir" style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:13,padding:0}}>🗑</button>
                   </div>
+                </div>
+              );
+            })}
+          </div>}
+          {tab==="cnj"&&<div>
+            <p style={{fontSize:11.5,color:"var(--text2)",margin:"0 0 14px",lineHeight:1.5}}>Feed bruto de movimentações trazidas automaticamente do CNJ (DataJud) — não faz parte do histórico oficial do processo. Revise e adicione ao histórico só o que for relevante.</p>
+            {(p.movimentacoesCnj||[]).length===0 ? (
+              <div style={{fontSize:13,color:"var(--text2)"}}>Nenhuma movimentação do CNJ registrada ainda.</div>
+            ) : [...(p.movimentacoesCnj||[])].sort((a,b)=>(b.data||"").localeCompare(a.data||"")).map((m,i)=>{
+              const jaNoHistorico = (p.andamentos||[]).some(a=>a.data===m.data && a.desc===m.desc);
+              return (
+                <div key={i} style={{display:"flex",gap:14,fontSize:13,marginBottom:8,alignItems:"flex-start"}}>
+                  <span style={{color:"var(--text2)",fontSize:11,whiteSpace:"nowrap",minWidth:80,marginTop:2}}>{m.data?fmtData(m.data):"—"}</span>
+                  <span style={{flex:1}}>{m.desc}</span>
+                  {jaNoHistorico
+                    ? <span style={{fontSize:10.5,color:"var(--green)",whiteSpace:"nowrap",flexShrink:0,marginTop:1}}>✓ já no histórico</span>
+                    : <button onClick={()=>onAddAndamento(p.id,{data:m.data,desc:m.desc,fonte:"cnj"})} style={{fontSize:10,padding:"3px 9px",cursor:"pointer",borderRadius:4,border:"1px solid var(--border2)",background:"#fff",color:"var(--accent)",fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>+ Adicionar ao histórico</button>}
                 </div>
               );
             })}
@@ -5730,6 +5747,7 @@ function ModalGerarContrato({cliente, onClose}){
 function ModalExecutarTarefaIA({tarefa, processo, cliente, onClose, onConcluir}){
   const [textoAnexado, setTextoAnexado] = useState("");
   const [instrucoes, setInstrucoes] = useState("");
+  const [tipoPeca, setTipoPeca] = useState("auto"); // 'auto' | 'completa' | 'simples'
   const [gerando, setGerando] = useState(false);
   const [lendoArquivo, setLendoArquivo] = useState(false);
   const [gerandoDocx, setGerandoDocx] = useState(false);
@@ -5790,6 +5808,8 @@ function ModalExecutarTarefaIA({tarefa, processo, cliente, onClose, onConcluir})
         processo?.resumoExecutivo?.situacaoAtual ? `Situação processual atual (já registrada no sistema): ${processo.resumoExecutivo.situacaoAtual}` : "",
         processo?.obs ? `Observações internas sobre o processo: ${processo.obs}` : "",
         tarefa.desc ? `Observações específicas desta tarefa: ${tarefa.desc}` : "",
+        tipoPeca==="completa" ? "\nTIPO DE PEÇA DEFINIDO PELA ADVOGADA: peça complexa (com seções DOS FATOS, DO DIREITO e DOS PEDIDOS). Siga a estrutura de PEÇA COMPLEXA mesmo que o título da tarefa pareça simples." : "",
+        tipoPeca==="simples" ? "\nTIPO DE PEÇA DEFINIDO PELA ADVOGADA: petição simples (direta, sem seções DOS FATOS/DO DIREITO/DOS PEDIDOS). Siga a estrutura de PETIÇÃO SIMPLES mesmo que o título da tarefa pareça mais complexo." : "",
         andamentosRecentes ? `\n--- Andamentos/movimentações mais recentes do processo (mais recente primeiro) ---\n${andamentosRecentes}` : "",
         instrucoes ? `\nInstruções adicionais da advogada para este documento: ${instrucoes}` : "",
         textoAnexado ? `\n=== DOCUMENTO ANEXADO PELA ADVOGADA — ANALISE COM ATENÇÃO ANTES DE REDIGIR ===\n${textoAnexado}\n=== FIM DO DOCUMENTO ANEXADO ===` : "",
@@ -5813,13 +5833,18 @@ Se o contexto fornecido não tiver fatos suficientes para fundamentar alguma par
 
 Estruture a peça no padrão da prática jurídica brasileira (endereçamento, qualificação das partes quando aplicável, fatos, fundamentos, pedidos). Este é um rascunho de apoio — a advogada revisará antes de protocolar.
 
+ANTES DE ESCREVER, decida se o ato pedido (o título da tarefa/prazo) exige uma PEÇA COMPLEXA ou é uma PETIÇÃO SIMPLES — isso muda a estrutura:
+- PEÇA COMPLEXA: contestação, réplica, recurso, impugnação, embargos, manifestação fundamentada sobre mérito, tutela de urgência, ou qualquer ato que exija argumentação jurídica de fato e de direito para ser decidido. Usa a estrutura completa com seções "DOS FATOS", "DO DIREITO" e "DOS PEDIDOS".
+- PETIÇÃO SIMPLES: juntada de documento, informar endereço/dados, requerer certidão, pedir vista, cumprir determinação simples do juízo, solicitar prazo, comunicar algo ao juízo, manifestação de concordância/anuência, ou qualquer ato que só precisa dizer objetivamente o que está sendo requerido, sem exigir fundamentação jurídica extensa. NÃO force as seções "DOS FATOS"/"DO DIREITO"/"DOS PEDIDOS" nesse caso — vá direto ao ponto, em 1 a 3 parágrafos comuns explicando o que aconteceu (se precisar de contexto) e o que está sendo requerido, sem títulos de seção. Pode ainda usar um ou dois "#PEDIDO#" ao final se o requerimento tiver mais de um item, mas sem o cabeçalho "#SECAO#DOS PEDIDOS" antes — ou pode simplesmente terminar o parágrafo com o pedido embutido no texto, o que for mais natural pra petição simples.
+Na dúvida entre os dois, prefira o formato mais simples e direto — é mais fácil a advogada complementar um texto enxuto do que cortar uma estrutura longa desnecessária.
+
 PREFERÊNCIAS FIXAS DE FORMATAÇÃO DESTA ADVOGADA (aplique sempre, em toda peça dirigida a um juízo — contestação, réplica, manifestação, petição em geral):
 
 Escreva sua resposta como uma lista de linhas de texto simples (uma "linha" = um parágrafo), sem markdown, sem numeração automática de listas, sem títulos "###". Para dar a cada linha a formatação certa, use OBRIGATORIAMENTE estes prefixos especiais quando aplicável (eles serão removidos e convertidos em formatação de verdade — nunca os omita nem invente outros):
 
 - Sem prefixo = parágrafo comum de corpo de texto.
-- "#TITULO#" no início da linha = título da peça (ex: "#TITULO#Contestação"). Use só uma vez, logo após o parágrafo de qualificação das partes.
-- "#SECAO#" no início da linha = título de uma seção numerada (ex: "#SECAO#I. DOS FATOS", "#SECAO#II. DO DIREITO", e por fim "#SECAO#DOS PEDIDOS" sem numeral romano). Use algarismos romanos maiúsculos em ordem (I., II., III...) para as seções de conteúdo; a seção final de pedidos não leva numeral, é só "DOS PEDIDOS".
+- "#TITULO#" no início da linha = título da peça (ex: "#TITULO#Contestação", ou "#TITULO#Petição" numa petição simples). Use só uma vez, logo após o parágrafo de qualificação das partes.
+- "#SECAO#" no início da linha = título de uma seção numerada (ex: "#SECAO#I. DOS FATOS", "#SECAO#II. DO DIREITO", e por fim "#SECAO#DOS PEDIDOS" sem numeral romano). Use algarismos romanos maiúsculos em ordem (I., II., III...) para as seções de conteúdo; a seção final de pedidos não leva numeral, é só "DOS PEDIDOS". Só use esse prefixo em PEÇA COMPLEXA — em petição simples, normalmente não há necessidade de nenhuma seção.
 - "#CITACAO#" no início da linha = uma citação de jurisprudência ou doutrina, com a referência entre parênteses ao final (ex: "#CITACAO#Texto da ementa ou trecho citado (STJ, REsp 123456/RJ, Rel. Min. Fulano, DJe 01/01/2024)."). Nunca use aspas nem invente jurisprudência/precedente que não exista no contexto fornecido — se não houver jurisprudência real disponível no contexto para citar, não invente uma; use apenas fundamentação legal (artigos de lei) nesse caso.
 - "#PEDIDO#" no início da linha = um item do rol de pedidos finais (ex: "#PEDIDO#o acolhimento da presente contestação;"). Cada pedido em uma linha separada — a letra (a), b), c)...) é adicionada automaticamente, não escreva a letra você mesma.
 - Para expressões em latim (ex: in fine, de cujus, venire contra factum proprium, data venia), envolva a expressão entre asteriscos simples para que apareça em itálico, assim: *in fine*.
@@ -5827,13 +5852,13 @@ Escreva sua resposta como uma lista de linhas de texto simples (uma "linha" = um
 Estrutura obrigatória da peça, nesta ordem:
 1. Endereçamento ao juízo, com o prefixo "#ENDERECO#" (será exibido em negrito e caixa alta automaticamente, não precisa escrever em caixa alta você mesma): "#ENDERECO#EXMO. SR. DR. JUIZ DE DIREITO DA [VARA] DA COMARCA DE [COMARCA] - [ÓRGÃO]". Preencha [VARA] e [COMARCA] usando o campo "Vara/Comarca" do processo (ex: se for "2ª Vara Cível de Itaboraí", então VARA = "2ª VARA CÍVEL" e COMARCA = "ITABORAÍ"). Preencha [ÓRGÃO] com a sigla do tribunal (TJ/RJ para Justiça Estadual, JF/RJ para Justiça Federal) — infira pelo sistema/tipo do processo; se não houver certeza, use "TJ/RJ" como padrão e sinalize a suposição entre colchetes logo após. Omita esta linha inteira se a peça não for dirigida a um juízo (ex: notificação extrajudicial).
 2. Linha separada: "Processo nº [número do processo]".
-3. Parágrafo único (comum) de qualificação completa das partes disponíveis no contexto, terminando literalmente em "apresentar a presente".
+3. Parágrafo único (comum) de qualificação completa das partes disponíveis no contexto, terminando literalmente em "apresentar a presente" (em peça complexa) ou "vem respeitosamente" (em petição simples).
 4. Linha "#TITULO#" com o nome da peça (1 a 2 linhas, será exibido em caixa alta automaticamente).
-5. Parágrafo comum de abertura contextualizando a ação/parte contrária, terminando literalmente em "pelos fatos e fundamentos a seguir expostos".
-6. Seções "#SECAO#" com numerais romanos (ex: I. DOS FATOS, II. DO DIREITO, III. ...) e os parágrafos comuns de conteúdo de cada uma.
-7. Quando houver citação de jurisprudência real e pertinente disponível no contexto (nunca invente), use "#CITACAO#".
+5. Em PEÇA COMPLEXA: parágrafo comum de abertura contextualizando a ação/parte contrária, terminando literalmente em "pelos fatos e fundamentos a seguir expostos". Em PETIÇÃO SIMPLES: pode pular direto para o corpo do pedido, sem esse parágrafo de abertura formal.
+6. Em PEÇA COMPLEXA: seções "#SECAO#" com numerais romanos (ex: I. DOS FATOS, II. DO DIREITO, III. ...) e os parágrafos comuns de conteúdo de cada uma. Em PETIÇÃO SIMPLES: 1 a 3 parágrafos comuns diretos, sem seções, explicando o que está sendo requerido.
+7. Quando houver citação de jurisprudência real e pertinente disponível no contexto (nunca invente), use "#CITACAO#" — normalmente só cabe em peça complexa.
 8. Expressões em latim entre asteriscos conforme instruído acima.
-9. Seção final "#SECAO#DOS PEDIDOS" seguida dos itens "#PEDIDO#" (um por linha).
+9. Em PEÇA COMPLEXA: seção final "#SECAO#DOS PEDIDOS" seguida dos itens "#PEDIDO#" (um por linha). Em PETIÇÃO SIMPLES: o pedido já deve estar embutido no(s) parágrafo(s) do item 6 — só use "#PEDIDO#" solto (sem o cabeçalho de seção antes) se o requerimento tiver mais de um item separado.
 10. Fechamento: "Nestes termos," / "Pede deferimento." / cidade e data por extenso (use a cidade do processo/escritório se souber, senão deixe "[Cidade], [data]"), cada um em sua própria linha comum — e por fim, SEMPRE estas duas linhas exatas, cada uma com o prefixo "#ASSINATURA#" (nunca altere o nome ou a OAB, mesmo que outro nome apareça em algum lugar do contexto):
 "#ASSINATURA#MICHELLI COSTA DE ABREU"
 "#ASSINATURA#OAB/RJ 155.134"
@@ -5895,6 +5920,15 @@ Formatação geral: parágrafos justificados, sem recuo de primeira linha (bloco
 
         {!resultado && (
           <>
+            <div style={{marginBottom:14}}>
+              <span style={lbl}>Tipo de peça</span>
+              <div style={{display:"flex",gap:0,background:"var(--bg2)",borderRadius:7,padding:3}}>
+                {[["auto","Detectar sozinho"],["completa","Peça completa"],["simples","Petição simples"]].map(([v,l])=>(
+                  <button key={v} type="button" onClick={()=>setTipoPeca(v)} style={{flex:1,padding:"7px 8px",fontSize:11.5,fontWeight:600,border:"none",borderRadius:5,cursor:"pointer",background:tipoPeca===v?"#fff":"transparent",color:tipoPeca===v?"var(--navy2)":"var(--text2)",boxShadow:tipoPeca===v?"0 1px 3px rgba(0,0,0,.1)":"none"}}>{l}</button>
+                ))}
+              </div>
+              <p style={{fontSize:10,color:"var(--text3)",margin:"5px 0 0"}}>{tipoPeca==="auto"?"A IA decide, pelo título da tarefa, se precisa da estrutura completa (Dos Fatos/Do Direito/Dos Pedidos) ou de uma petição direta.":tipoPeca==="completa"?"Sempre com seções Dos Fatos, Do Direito e Dos Pedidos.":"Direto ao ponto, sem seções — ideal pra juntada de documento, requerimento simples, etc."}</p>
+            </div>
             <div style={{marginBottom:12}}>
               <span style={lbl}>Anexar documento (opcional)</span>
               <input type="file" accept=".pdf,application/pdf,.txt,text/plain" onChange={lerArquivo} disabled={lendoArquivo} style={{fontSize:12,marginBottom:8}}/>
@@ -7204,6 +7238,7 @@ function AppPrincipal({user}){
           resumoExecutivo: parseCampo(p.resumoExecutivo, null),
           historicoAlteracoes: parseCampo(p.historicoAlteracoes, []),
           atualizacoesPendentes: parseCampo(p.atualizacoesPendentes, null),
+          movimentacoesCnj: parseCampo(p.movimentacoesCnj, []),
         })));
         setClientes(rCli.data||[]);
         setParcelas(rParc.data||[]);
@@ -7227,7 +7262,7 @@ function AppPrincipal({user}){
   // "tarefas", "agenda", "clientes" etc. não têm colunas como "andamentos" ou "checklist" —
   // tentar enviá-las (mesmo como undefined) já causava erro "column not found" no Supabase.
   const CAMPOS_JSON_POR_TABELA = {
-    processos: ["andamentos","partes","checklist","exitos","debito","documentos","docChecklist","prazoProcessual","audiencia","vinculo","resumoExecutivo","historicoAlteracoes","atualizacoesPendentes"],
+    processos: ["andamentos","partes","checklist","exitos","debito","documentos","docChecklist","prazoProcessual","audiencia","vinculo","resumoExecutivo","historicoAlteracoes","atualizacoesPendentes","movimentacoesCnj"],
   };
 
   const autoSave = React.useCallback((tabela, dados, delay=1200) => {
@@ -7305,6 +7340,26 @@ function AppPrincipal({user}){
     const precisaLimpar = processos.some(p=>idsParaLimpar.has(p.id) && p.prazo);
     if(!precisaLimpar) return;
     setProcessos(ps=>ps.map(p=>(idsParaLimpar.has(p.id) && p.prazo) ? {...p, prazo:"", prazoAto:""} : p));
+  }, [carregandoDados]);
+
+  // Correção única: movimentações do CNJ que, em versões anteriores da
+  // atualização automática, foram gravadas junto com os Andamentos "de
+  // verdade" (poluindo a timeline principal). Move essas entradas — as
+  // marcadas com fonte "cnj" — para a nova aba própria, sem duplicar e sem
+  // apagar nada, só reorganizando onde cada coisa fica visível.
+  React.useEffect(()=>{
+    if(carregandoDados) return;
+    const precisaMover = processos.some(p=>(p.andamentos||[]).some(a=>a.fonte==="cnj"));
+    if(!precisaMover) return;
+    setProcessos(ps=>ps.map(p=>{
+      const misturados = (p.andamentos||[]).filter(a=>a.fonte==="cnj");
+      if(misturados.length===0) return p;
+      const andamentosLimpos = (p.andamentos||[]).filter(a=>a.fonte!=="cnj");
+      const jaExistentes = new Set((p.movimentacoesCnj||[]).map(a=>`${a.data}|${a.desc}`));
+      const paraMover = misturados.filter(a=>!jaExistentes.has(`${a.data}|${a.desc}`));
+      const movimentacoesCnj = [...(p.movimentacoesCnj||[]), ...paraMover].sort((a,b)=>(a.data||"").localeCompare(b.data||""));
+      return {...p, andamentos: andamentosLimpos, movimentacoesCnj};
+    }));
   }, [carregandoDados]);
 
   const abrirProcesso = (proc) => { setAbrirProcessoId(proc.id); setPagina("processos"); };
