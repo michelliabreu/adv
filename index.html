@@ -5622,7 +5622,7 @@ async function gerarProcuracaoParaCliente(cliente, finalidadeEspecifica){
 // honorários, forma de pagamento) informadas na hora.
 async function gerarContratoParaCliente(cliente, dadosContrato){
   const qualificacao = montarQualificacaoCliente(cliente);
-  const { itensObjeto, valorTotal, adiantamento, parcelamento, percentualExito, baseCalculoExito, foro } = dadosContrato;
+  const { itensObjeto, valorTotal, adiantamento, parcelamento, percentualExito, baseCalculoExito, foro, somenteExito } = dadosContrato;
   const temExito = percentualExito && percentualExito.trim();
   const foroFinal = (foro && foro.trim()) || "Itaboraí/RJ";
   const contadorPedido = {n:0};
@@ -5639,11 +5639,18 @@ async function gerarContratoParaCliente(cliente, dadosContrato){
     `2.1 - Este contrato permanecerá vigente até o encerramento definitivo de todos os processos objeto deste instrumento, incluindo eventuais recursos e cumprimento de sentença.`,
     `2.2 - Considera-se encerramento definitivo o trânsito em julgado da decisão final ou a impossibilidade de interposição de novos recursos.`,
     "#SECAO#Cláusula 3. Honorários Contratuais",
-    `3.1 - Pelos serviços ora contratados, o CONTRATANTE pagará à CONTRATADA o valor total de ${valorTotal}, da seguinte forma:`,
   ];
-  if(adiantamento && adiantamento.trim()) linhas.push(`#PEDIDO#${adiantamento.trim()}, pagos a título de adiantamento;`);
-  linhas.push(`#PEDIDO#o saldo remanescente será pago ${parcelamento};`);
-  if(temExito) linhas.push(`#PEDIDO#além dos honorários contratuais ajustados, o CONTRATANTE pagará à CONTRATADA honorários de êxito equivalentes a ${percentualExito.trim()} sobre o benefício econômico obtido na demanda, devidos no momento em que houver obtenção de resultado favorável definitivo, ainda que parcial, inclusive em caso de acordo ou solução administrativa.`);
+  if(somenteExito){
+    // Modalidade só-êxito: não há honorário fixo/inicial — a remuneração da
+    // CONTRATADA fica condicionada integralmente ao resultado da demanda.
+    linhas.push(`3.1 - Pelos serviços ora contratados, não haverá cobrança de honorários fixos ou iniciais. A remuneração da CONTRATADA fica condicionada ao resultado da demanda, na forma dos honorários de êxito estabelecidos no item abaixo.`);
+    linhas.push(`#PEDIDO#a título de honorários de êxito, o CONTRATANTE pagará à CONTRATADA valor equivalente a ${percentualExito.trim()} sobre o benefício econômico obtido na demanda, devidos no momento em que houver obtenção de resultado favorável definitivo, ainda que parcial, inclusive em caso de acordo ou solução administrativa.`);
+  } else {
+    linhas.push(`3.1 - Pelos serviços ora contratados, o CONTRATANTE pagará à CONTRATADA o valor total de ${valorTotal}, da seguinte forma:`);
+    if(adiantamento && adiantamento.trim()) linhas.push(`#PEDIDO#${adiantamento.trim()}, pagos a título de adiantamento;`);
+    linhas.push(`#PEDIDO#o saldo remanescente será pago ${parcelamento};`);
+    if(temExito) linhas.push(`#PEDIDO#além dos honorários contratuais ajustados, o CONTRATANTE pagará à CONTRATADA honorários de êxito equivalentes a ${percentualExito.trim()} sobre o benefício econômico obtido na demanda, devidos no momento em que houver obtenção de resultado favorável definitivo, ainda que parcial, inclusive em caso de acordo ou solução administrativa.`);
+  }
   linhas.push(`3.2 - Os pagamentos deverão ser realizados via PIX ou transferência para conta de titularidade da CONTRATADA.`);
   linhas.push(`3.3 - O inadimplemento implicará multa de 10% (dez por cento) sobre o valor em atraso, acrescido de juros de 1% (um por cento) ao mês e correção monetária.`);
   if(temExito && baseCalculoExito && baseCalculoExito.trim()){
@@ -5685,6 +5692,7 @@ async function gerarContratoParaCliente(cliente, dadosContrato){
 // Formulário para coletar os dados específicos do contrato (objeto, honorários, forma de
 // pagamento e, se houver, percentual de êxito) antes de gerar o documento no timbrado.
 function ModalGerarContrato({cliente, onClose}){
+  const [somenteExito, setSomenteExito] = useState(false);
   const [objeto, setObjeto] = useState(""); // uma linha por item
   const [valorTotal, setValorTotal] = useState("");
   const [adiantamento, setAdiantamento] = useState("");
@@ -5697,7 +5705,12 @@ function ModalGerarContrato({cliente, onClose}){
 
   const gerar = async () => {
     const itensObjeto = objeto.split("\n").map(l=>l.trim()).filter(Boolean);
-    if(!itensObjeto.length || !valorTotal.trim() || !parcelamento.trim()){
+    if(somenteExito){
+      if(!itensObjeto.length || !percentualExito.trim()){
+        setErro("Preencha ao menos o objeto e o percentual de êxito.");
+        return;
+      }
+    } else if(!itensObjeto.length || !valorTotal.trim() || !parcelamento.trim()){
       setErro("Preencha ao menos o objeto, o valor total dos honorários e a forma de pagamento do saldo.");
       return;
     }
@@ -5706,7 +5719,7 @@ function ModalGerarContrato({cliente, onClose}){
       await gerarContratoParaCliente(cliente, {
         itensObjeto, valorTotal: valorTotal.trim(), adiantamento: adiantamento.trim(),
         parcelamento: parcelamento.trim(), percentualExito: percentualExito.trim(),
-        baseCalculoExito: baseCalculoExito.trim(), foro: foro.trim(),
+        baseCalculoExito: baseCalculoExito.trim(), foro: foro.trim(), somenteExito,
       });
       onClose();
     } catch(e) {
@@ -5723,13 +5736,24 @@ function ModalGerarContrato({cliente, onClose}){
         <p style={{fontSize:11.5,color:"var(--text2)",margin:"0 0 14px",lineHeight:1.5}}>
           Segue o modelo padrão do escritório (9 cláusulas). A qualificação completa já vem do cadastro — preencha só o que muda de contrato pra contrato:
         </p>
+        <div style={{marginBottom:14}}>
+          <span style={lbl}>Modalidade de honorários</span>
+          <div style={{display:"flex",gap:0,background:"var(--bg2)",borderRadius:7,padding:3}}>
+            {[[false,"Fixo + Êxito (padrão)"],[true,"Somente Êxito"]].map(([v,l])=>(
+              <button key={String(v)} type="button" onClick={()=>setSomenteExito(v)} style={{flex:1,padding:"7px 8px",fontSize:11.5,fontWeight:600,border:"none",borderRadius:5,cursor:"pointer",background:somenteExito===v?"#fff":"transparent",color:somenteExito===v?"var(--navy2)":"var(--text2)",boxShadow:somenteExito===v?"0 1px 3px rgba(0,0,0,.1)":"none"}}>{l}</button>
+            ))}
+          </div>
+          {somenteExito && <p style={{fontSize:10,color:"var(--text3)",margin:"5px 0 0"}}>O contrato sai sem cláusula de honorário fixo/inicial — a cláusula 3 fica só com os honorários de êxito.</p>}
+        </div>
         <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}>
           <div><span style={lbl}>Objeto — um item por linha</span><textarea value={objeto} onChange={e=>setObjeto(e.target.value)} style={{...inp,minHeight:70,resize:"vertical"}} placeholder={"Ex:\npropositura de ação de cobrança referente a...\natuação em eventual defesa em embargos ou impugnação\nadoção de medidas administrativas pertinentes"}/></div>
-          <div><span style={lbl}>Valor total dos honorários</span><input value={valorTotal} onChange={e=>setValorTotal(e.target.value)} style={inp} placeholder="Ex: R$ 9.000,00 (nove mil reais)"/></div>
-          <div><span style={lbl}>Adiantamento já pago <span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span></span><input value={adiantamento} onChange={e=>setAdiantamento(e.target.value)} style={inp} placeholder="Ex: R$ 1.000,00 (mil reais)"/></div>
-          <div><span style={lbl}>Forma de pagamento do saldo</span><textarea value={parcelamento} onChange={e=>setParcelamento(e.target.value)} style={{...inp,minHeight:50,resize:"vertical"}} placeholder="Ex: em 3 (três) parcelas mensais, iguais e sucessivas, com vencimento todo dia 17 de cada mês"/></div>
+          {!somenteExito && <>
+            <div><span style={lbl}>Valor total dos honorários</span><input value={valorTotal} onChange={e=>setValorTotal(e.target.value)} style={inp} placeholder="Ex: R$ 9.000,00 (nove mil reais)"/></div>
+            <div><span style={lbl}>Adiantamento já pago <span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span></span><input value={adiantamento} onChange={e=>setAdiantamento(e.target.value)} style={inp} placeholder="Ex: R$ 1.000,00 (mil reais)"/></div>
+            <div><span style={lbl}>Forma de pagamento do saldo</span><textarea value={parcelamento} onChange={e=>setParcelamento(e.target.value)} style={{...inp,minHeight:50,resize:"vertical"}} placeholder="Ex: em 3 (três) parcelas mensais, iguais e sucessivas, com vencimento todo dia 17 de cada mês"/></div>
+          </>}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><span style={lbl}>Percentual de êxito <span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span></span><input value={percentualExito} onChange={e=>setPercentualExito(e.target.value)} style={inp} placeholder="Ex: 20% (vinte por cento)"/></div>
+            <div><span style={lbl}>Percentual de êxito {somenteExito?"":<span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span>}</span><input value={percentualExito} onChange={e=>setPercentualExito(e.target.value)} style={inp} placeholder="Ex: 20% (vinte por cento)"/></div>
             <div><span style={lbl}>Base de cálculo do êxito <span style={{fontWeight:400,textTransform:"none"}}>(opcional)</span></span><input value={baseCalculoExito} onChange={e=>setBaseCalculoExito(e.target.value)} style={inp} placeholder="Ex: R$ 500.000,00"/></div>
           </div>
           <div><span style={lbl}>Foro</span><input value={foro} onChange={e=>setForo(e.target.value)} style={inp}/></div>
