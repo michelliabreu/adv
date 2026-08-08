@@ -5101,7 +5101,7 @@ async function buscarPublicacoesDJEN({oabNumero, oabUf, dias, intimacoesAtuais, 
 }
 
 function PaginaIntimacoes({intimacoes, setIntimacoes, processos, setProcessos, clientes, setClientes, equipe, setTarefas, onAbrirProcesso, configDjen}){
-  const [filtro,setFiltro] = useState("novas");
+  const [filtro,setFiltro] = useState("nao_lidas");
   const [criandoPrazoPara, setCriandoPrazoPara] = useState(null);
   const [criandoTarefaPara, setCriandoTarefaPara] = useState(null);
   const [cadastrandoDe, setCadastrandoDe] = useState(null);
@@ -5186,10 +5186,9 @@ Use string vazia quando não identificar o dado com segurança. "parteClienteEhA
 
   const lista = useMemo(()=>{
     return (intimacoes||[]).filter(i=>{
-      if(filtro==="novas") return !i.lida;
-      if(filtro==="lidas") return i.lida && !i.arquivada;
-      if(filtro==="arquivadas") return i.arquivada;
-      return true;
+      if(filtro==="nao_lidas") return !i.lida;
+      if(filtro==="lidas") return i.lida;
+      return true; // "ambas"
     }).sort((a,b)=>(b.dataDisponibilizacao||"").localeCompare(a.dataDisponibilizacao||""));
   },[intimacoes,filtro]);
 
@@ -5205,9 +5204,9 @@ Use string vazia quando não identificar o dado com segurança. "parteClienteEhA
     setIntimacoes(is=>is.map(i=>i.id===id?{...i,lida:true}:i));
     salvarCampoIntimacaoImediato(id, {lida:true});
   };
-  const arquivar = id => {
-    setIntimacoes(is=>is.map(i=>i.id===id?{...i,arquivada:true,lida:true}:i));
-    salvarCampoIntimacaoImediato(id, {arquivada:true,lida:true});
+  const marcarNaoLida = id => {
+    setIntimacoes(is=>is.map(i=>i.id===id?{...i,lida:false}:i));
+    salvarCampoIntimacaoImediato(id, {lida:false});
   };
 
   // Ao vincular uma intimação a um processo, o texto da publicação também é lançado
@@ -5260,12 +5259,22 @@ Use string vazia quando não identificar o dado com segurança. "parteClienteEhA
   };
 
   const naoLidas = (intimacoes||[]).filter(i=>!i.lida).length;
+  const marcarTodasComoLidas = () => {
+    const idsNaoLidas = (intimacoes||[]).filter(i=>!i.lida).map(i=>i.id);
+    if(idsNaoLidas.length===0) return;
+    if(!confirm(`Marcar ${idsNaoLidas.length} intimação(ões) como lida(s)?`)) return;
+    setIntimacoes(is=>is.map(i=>idsNaoLidas.includes(i.id)?{...i,lida:true}:i));
+    idsNaoLidas.forEach(id=>salvarCampoIntimacaoImediato(id, {lida:true}));
+  };
 
   return (
     <div>
-      <div style={{marginBottom:16}}>
-        <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Intimações</h1>
-        <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{naoLidas>0?`${naoLidas} intimação(ões) não lida(s)`:"Tudo em dia"}</p>
+      <div style={{marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:10,flexWrap:"wrap"}}>
+        <div>
+          <h1 style={{fontSize:22,fontWeight:700,color:"var(--text1)",margin:"0 0 3px",letterSpacing:"-.02em"}}>Intimações</h1>
+          <p style={{fontSize:12.5,color:"var(--text2)",margin:0}}>{naoLidas>0?`${naoLidas} intimação(ões) não lida(s)`:"Tudo em dia"}</p>
+        </div>
+        {naoLidas>0 && <button onClick={marcarTodasComoLidas} style={{...btnSec,fontSize:11.5,padding:"7px 14px"}}>✓ Marcar todas como lidas</button>}
       </div>
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:10,padding:"16px 18px",marginBottom:12}}>
@@ -5301,7 +5310,7 @@ Use string vazia quando não identificar o dado com segurança. "parteClienteEhA
 
       <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"8px 14px",marginBottom:12}}>
         <div style={{display:"flex",gap:0}}>
-          {[["novas","Novas"],["lidas","Lidas"],["arquivadas","Arquivadas"]].map(([v,l])=>(
+          {[["nao_lidas","Não lidas"],["lidas","Lidas"],["ambas","Ambas"]].map(([v,l])=>(
             <button key={v} onClick={()=>setFiltro(v)} style={{background:"none",border:"none",borderBottom:filtro===v?"2px solid var(--navy2)":"2px solid transparent",color:filtro===v?"var(--navy2)":"var(--text2)",padding:"5px 12px 7px",fontSize:11,fontWeight:filtro===v?700:500,cursor:"pointer",textTransform:"uppercase",letterSpacing:".5px"}}>{l}</button>
           ))}
         </div>
@@ -5312,16 +5321,23 @@ Use string vazia quando não identificar o dado com segurança. "parteClienteEhA
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {lista.map(i=>{
             const proc = processos.find(p=>p.id===i.procId);
+            const possivelPrazo = detectarPrazo({desc: i.texto || i.teor});
             return (
-              <div key={i.id} style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"14px 16px",opacity:i.lida&&filtro==="novas"?0.6:1}}>
+              <div key={i.id} style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"14px 16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,gap:10}}>
                   <div>
                     <p style={{fontSize:12,fontWeight:700,margin:"0 0 2px",color:"var(--navy)"}}>{i.orgao||"Tribunal"}</p>
                     <p style={{fontSize:10.5,color:"var(--text2)",margin:0}}>{fmtData(i.dataDisponibilizacao)}</p>
                   </div>
-                  {!i.lida&&<Pill bg="var(--accent-light)" color="var(--accent)" label="Nova" sm/>}
+                  {!i.lida&&<Pill bg="var(--accent-light)" color="var(--accent)" label="Não lida" sm/>}
                 </div>
-                <p style={{fontSize:12.5,color:"var(--text1)",margin:"0 0 10px",lineHeight:1.5}}>{i.texto || i.teor}</p>
+                <p style={{fontSize:12.5,color:"var(--text1)",margin:"0 0 8px",lineHeight:1.5,fontWeight:i.lida?400:700}}>{i.texto || i.teor}</p>
+                {possivelPrazo && (
+                  <div style={{background:"var(--amber-bg,#FEF3E0)",border:"1px solid #F5CE85",borderRadius:6,padding:"8px 12px",marginBottom:10,fontSize:11.5,color:"#8A5A1C",display:"flex",alignItems:"center",gap:7}}>
+                    <span style={{fontSize:13}}>⏱</span>
+                    <span><strong>Prazo final previsto: {fmtData(calcularVencimento(i.dataDisponibilizacao, possivelPrazo.prazo))}</strong> — {possivelPrazo.ato}</span>
+                  </div>
+                )}
                 <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                   <select value={i.procId||""} onChange={e=>vincularProcesso(i.id, e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11,width:220}}>
                     <option value="">Vincular a um processo…</option>
@@ -5331,8 +5347,9 @@ Use string vazia quando não identificar o dado com segurança. "parteClienteEhA
                   {!i.procId&&<button onClick={()=>{setCadastrandoDe(i);setDadosCadastro(null);setErroCadastro("");analisarPublicacaoParaCadastro(i);}} style={{...btnSec,fontSize:10.5,padding:"5px 10px",color:"var(--accent)",borderColor:"var(--accent)"}}>✨ Cadastrar processo</button>}
                   <button onClick={()=>setCriandoPrazoPara(i)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>⏱ Criar prazo</button>
                   <button onClick={()=>setCriandoTarefaPara(i)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>✓ Criar tarefa</button>
-                  {!i.lida&&<button onClick={()=>marcarLida(i.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>Marcar como lida</button>}
-                  {!i.arquivada&&<button onClick={()=>arquivar(i.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",color:"var(--text2)"}}>📦 Arquivar</button>}
+                  {!i.lida
+                    ? <button onClick={()=>marcarLida(i.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px"}}>✓ Marcar como lida</button>
+                    : <button onClick={()=>marcarNaoLida(i.id)} style={{...btnSec,fontSize:10.5,padding:"5px 10px",color:"var(--text2)"}}>Marcar como não lida</button>}
                 </div>
               </div>
             );
