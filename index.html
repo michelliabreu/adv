@@ -6239,6 +6239,50 @@ function CardTarefaDetalhado({t, processos, clientes, equipe, onAbrirProcesso, o
   );
 }
 
+// Linha compacta de prazo/tarefa — usada na visão "Agrupado". Ações ficam
+// escondidas atrás do menu "⋯" pra manter a linha enxuta; clicar na linha
+// abre o modal de visão rápida.
+function LinhaTarefaCompacta({t, processos, clientes, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onVerRapido, onMudarStatus}){
+  const [menuAberto, setMenuAberto] = useState(false);
+  const proc = t.procId ? processos.find(p=>String(p.id)===String(t.procId)) : null;
+  const nomeCliente = (()=>{
+    if(t.clienteId){ const c=(clientes||[]).find(x=>String(x.id)===String(t.clienteId)); if(c) return c.nome; }
+    if(proc?.clienteId){ const c=(clientes||[]).find(x=>x.id===proc.clienteId); if(c) return c.nome; }
+    return null;
+  })();
+  const naoCumprido = t.status !== "concluido";
+  const dias = t.prazo ? diasRest(t.prazo) : null;
+  const atrasado = naoCumprido && dias!==null && dias<0;
+  const dotCor = t.status==="concluido" ? "var(--green)" : atrasado ? "var(--red)" : t.status==="em_andamento" ? "var(--accent)" : "var(--text3)";
+  const prazoTexto = t.prazo ? (dias<0?`venceu há ${Math.abs(dias)} dia(s)`:dias===0?"vence hoje":dias===1?"vence amanhã":`em ${dias} dias`) : null;
+  const subtitulo = [nomeCliente, proc?.numero, prazoTexto].filter(Boolean).join(" · ");
+
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:"#fff",border:"1px solid var(--border1)",borderRadius:6,marginBottom:4}}>
+      <span style={{width:6,height:6,borderRadius:"50%",background:dotCor,flexShrink:0}}/>
+      <div onClick={()=>onVerRapido(t)} style={{flex:1,minWidth:0,cursor:"pointer"}}>
+        <p style={{fontSize:13,fontWeight:600,margin:0,textDecoration:t.status==="concluido"?"line-through":"none",color:t.status==="concluido"?"var(--text3)":"var(--text1)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.titulo}</p>
+        {subtitulo && <p style={{fontSize:11,color:atrasado?"var(--red)":"var(--text2)",margin:"2px 0 0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{subtitulo}</p>}
+      </div>
+      <div style={{position:"relative",flexShrink:0}}>
+        <button onClick={()=>setMenuAberto(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text2)",fontSize:15,padding:"4px 8px",lineHeight:1}}>⋯</button>
+        {menuAberto && (
+          <div onMouseLeave={()=>setMenuAberto(false)} style={{position:"absolute",right:0,top:"110%",background:"#fff",border:"1px solid var(--border1)",borderRadius:7,boxShadow:"0 8px 20px rgba(0,0,0,.12)",overflow:"hidden",zIndex:10,minWidth:170}}>
+              {naoCumprido && <div onClick={()=>{onExecutar(t);setMenuAberto(false);}} style={{padding:"9px 12px",fontSize:12,cursor:"pointer",borderBottom:"1px solid var(--border1)"}}>✨ Executar com IA</div>}
+              <div onClick={()=>{onEditar(t);setMenuAberto(false);}} style={{padding:"9px 12px",fontSize:12,cursor:"pointer",borderBottom:"1px solid var(--border1)"}}>✎ Editar</div>
+              {proc && <div onClick={()=>{onAbrirProcesso(proc);setMenuAberto(false);}} style={{padding:"9px 12px",fontSize:12,cursor:"pointer",borderBottom:"1px solid var(--border1)"}}>📄 Ver processo</div>}
+              <select value={t.status} onChange={e=>{onMudarStatus(t.id, e.target.value); setMenuAberto(false);}} style={{width:"100%",fontSize:12,padding:"9px 12px",border:"none",borderBottom:"1px solid var(--border1)",background:"#fff",cursor:"pointer"}}>
+                {STATUS_TAREFA_VALIDOS.map(k=><option key={k} value={k}>{STATUS_TAREFA_CFG[k].label}</option>)}
+              </select>
+              {t.status==="concluido" && <div onClick={()=>{onArquivar(t.id);setMenuAberto(false);}} style={{padding:"9px 12px",fontSize:12,cursor:"pointer",color:"var(--text2)",borderBottom:"1px solid var(--border1)"}}>📦 Arquivar</div>}
+              <div onClick={()=>{onExcluir(t.id);setMenuAberto(false);}} style={{padding:"9px 12px",fontSize:12,cursor:"pointer",color:"var(--red)"}}>🗑 Excluir</div>
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
+
 // Agrupa prazos/tarefas por urgência (Atrasados / Hoje / Esta semana / Mais
 // adiante / Sem prazo / Concluídas) — mesma lógica de dias restantes já usada
 // no card individual, só reorganizada em seções.
@@ -6269,15 +6313,15 @@ function TarefasAgrupadas({lista, processos, clientes, equipe, onAbrirProcesso, 
   return (
     <div>
       {grupos.map(g=>(
-        <div key={g.chave} style={{marginBottom:24}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-            <span style={{fontSize:14}}>{g.icone}</span>
-            <span style={{fontSize:12,fontWeight:700,color:g.cor,textTransform:"uppercase",letterSpacing:".6px"}}>{g.label}</span>
+        <div key={g.chave} style={{marginBottom:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:13}}>{g.icone}</span>
+            <span style={{fontSize:11.5,fontWeight:700,color:g.cor,textTransform:"uppercase",letterSpacing:".6px"}}>{g.label}</span>
             <span style={{fontSize:11,color:"var(--text3)"}}>{g.itens.length}</span>
           </div>
           <div style={{opacity:g.chave==="concluidas"?0.6:1}}>
             {g.itens.map(t=>(
-              <CardTarefaDetalhado key={t.id} t={t} processos={processos} clientes={clientes} equipe={equipe}
+              <LinhaTarefaCompacta key={t.id} t={t} processos={processos} clientes={clientes}
                 onAbrirProcesso={onAbrirProcesso} onEditar={onEditar} onArquivar={onArquivar} onExcluir={onExcluir}
                 onExecutar={onExecutar} onVerRapido={onVerRapido} onMudarStatus={onMudarStatus}/>
             ))}
