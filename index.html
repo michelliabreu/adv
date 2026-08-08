@@ -6239,13 +6239,62 @@ function CardTarefaDetalhado({t, processos, clientes, equipe, onAbrirProcesso, o
   );
 }
 
+// Agrupa prazos/tarefas por urgência (Atrasados / Hoje / Esta semana / Mais
+// adiante / Sem prazo / Concluídas) — mesma lógica de dias restantes já usada
+// no card individual, só reorganizada em seções.
+function TarefasAgrupadas({lista, processos, clientes, equipe, onAbrirProcesso, onEditar, onArquivar, onExcluir, onExecutar, onVerRapido, onMudarStatus}){
+  const grupos = useMemo(()=>{
+    const atrasados=[], hoje=[], semana=[], futuro=[], semPrazo=[], concluidas=[];
+    lista.forEach(t=>{
+      if(t.status==="concluido"){ concluidas.push(t); return; }
+      if(!t.prazo){ semPrazo.push(t); return; }
+      const dias = diasRest(t.prazo);
+      if(dias<0) atrasados.push(t);
+      else if(dias===0) hoje.push(t);
+      else if(dias<=7) semana.push(t);
+      else futuro.push(t);
+    });
+    return [
+      {chave:"atrasados", label:"Atrasados", icone:"⚠", cor:"var(--red)", itens:atrasados},
+      {chave:"hoje", label:"Hoje", icone:"📅", cor:"var(--amber)", itens:hoje},
+      {chave:"semana", label:"Esta semana", icone:"🗓", cor:"var(--navy2)", itens:semana},
+      {chave:"futuro", label:"Mais adiante", icone:"⏳", cor:"var(--text2)", itens:futuro},
+      {chave:"sem_prazo", label:"Sem prazo definido", icone:"◇", cor:"var(--text2)", itens:semPrazo},
+      {chave:"concluidas", label:"Concluídas", icone:"✓", cor:"var(--green)", itens:concluidas},
+    ].filter(g=>g.itens.length>0);
+  },[lista]);
+
+  if(grupos.length===0) return <div style={{background:"#fff",border:"1px solid var(--border1)",borderRadius:8,padding:"2.5rem",textAlign:"center",color:"var(--text2)",fontSize:13}}>Nenhum prazo ou tarefa encontrado.</div>;
+
+  return (
+    <div>
+      {grupos.map(g=>(
+        <div key={g.chave} style={{marginBottom:24}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <span style={{fontSize:14}}>{g.icone}</span>
+            <span style={{fontSize:12,fontWeight:700,color:g.cor,textTransform:"uppercase",letterSpacing:".6px"}}>{g.label}</span>
+            <span style={{fontSize:11,color:"var(--text3)"}}>{g.itens.length}</span>
+          </div>
+          <div style={{opacity:g.chave==="concluidas"?0.6:1}}>
+            {g.itens.map(t=>(
+              <CardTarefaDetalhado key={t.id} t={t} processos={processos} clientes={clientes} equipe={equipe}
+                onAbrirProcesso={onAbrirProcesso} onEditar={onEditar} onArquivar={onArquivar} onExcluir={onExcluir}
+                onExecutar={onExecutar} onVerRapido={onVerRapido} onMudarStatus={onMudarStatus}/>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PaginaTarefas({tarefas, setTarefas, processos, setProcessos, clientes, equipe, onAbrirProcesso, onVerPrazoRapido}){
   const [editando,setEditando] = useState(null);
   const [novo,setNovo] = useState(false);
   const [filtroStatus,setFiltroStatus] = useState("todos");
   const [filtroResp,setFiltroResp] = useState("");
   const [busca,setBusca] = useState("");
-  const [visao,setVisao] = useState("kanban");
+  const [visao,setVisao] = useState("agrupado");
   const [executandoTarefa,setExecutandoTarefa] = useState(null);
 
   const ativas = (tarefas||[]).filter(t=>!t.arquivada);
@@ -6296,7 +6345,7 @@ function PaginaTarefas({tarefas, setTarefas, processos, setProcessos, clientes, 
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <div style={{display:"flex",background:"var(--bg2)",borderRadius:7,padding:3}}>
-            {[["kanban","▦ Kanban"],["lista","☰ Lista"]].map(([v,l])=>(
+            {[["agrupado","◐ Agrupado"],["kanban","▦ Kanban"],["lista","☰ Lista"]].map(([v,l])=>(
               <button key={v} onClick={()=>setVisao(v)} style={{padding:"6px 13px",fontSize:11.5,fontWeight:600,border:"none",borderRadius:5,cursor:"pointer",background:visao===v?"#fff":"transparent",color:visao===v?"var(--navy2)":"var(--text2)",boxShadow:visao===v?"0 1px 3px rgba(0,0,0,.1)":"none",whiteSpace:"nowrap"}}>{l}</button>
             ))}
           </div>
@@ -6318,7 +6367,13 @@ function PaginaTarefas({tarefas, setTarefas, processos, setProcessos, clientes, 
         </div>
       </div>
 
-      {visao==="kanban" ? (
+      {visao==="agrupado" ? (
+        <TarefasAgrupadas
+          lista={lista} processos={processos} clientes={clientes} equipe={equipe}
+          onAbrirProcesso={onAbrirProcesso} onEditar={setEditando} onArquivar={arquivar} onExcluir={excluir}
+          onExecutar={setExecutandoTarefa} onVerRapido={onVerPrazoRapido} onMudarStatus={mudarStatus}
+        />
+      ) : visao==="kanban" ? (
         <KanbanTarefas
           tarefas={useMemo(()=>{
             const q = busca.toLowerCase();
